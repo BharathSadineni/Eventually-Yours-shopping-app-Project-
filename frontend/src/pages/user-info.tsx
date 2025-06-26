@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import { z } from "zod";
 import { createSessionId } from "@/lib/utils";
+import { apiRequest } from "@/lib/queryClient";
 
 const categories = [
   { id: "art-decor", label: "Art & Decor" },
@@ -253,16 +254,13 @@ export default function UserInfo() {
               // Send imported data to backend to store in session
               const currentSessionId = sessionId || data.sessionId || createSessionId();
               try {
-                const response = await fetch("/api/user-info", {
-                  method: "POST",
+                const response = await apiRequest("POST", "/api/user-info", {
+                  ...importedProfile,
+                  session_id: currentSessionId,
+                }, {
                   headers: {
-                    "Content-Type": "application/json",
                     "X-Session-Id": currentSessionId,
                   },
-                  body: JSON.stringify({
-                    ...importedProfile,
-                    session_id: currentSessionId,
-                  }),
                 });
                 const result = await response.json();
                 if (result.status === "success") {
@@ -375,16 +373,13 @@ const handleCategoryChange = (categoryId: string, checked: boolean) => {
 
     try {
       const currentSessionId = sessionId || createSessionId();
-      const response = await fetch("/api/user-info", {
-        method: "POST",
+      const response = await apiRequest("POST", "/api/user-info", {
+        ...submissionData,
+        session_id: currentSessionId,
+      }, {
         headers: {
-          "Content-Type": "application/json",
           "X-Session-Id": currentSessionId,
         },
-        body: JSON.stringify({
-          ...submissionData,
-          session_id: currentSessionId,
-        }),
       });
       const result = await response.json();
 

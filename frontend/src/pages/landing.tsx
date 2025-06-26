@@ -5,6 +5,7 @@ import TypewriterText, { TypewriterProvider } from "@/components/typewriter-text
 import MusicPlayer from "@/components/music-player";
 import { useUser } from "@/context/UserContext";
 import { createSessionId, setupSessionCleanup } from "@/lib/utils";
+import { apiRequest } from "@/lib/queryClient";
 import { 
   ShoppingCart, 
   Brain, 
@@ -72,15 +73,12 @@ export default function Landing() {
     if (!sessionId) {
       const newSessionId = createSessionId();
       setSessionId(newSessionId);
-      fetch('/api/init-session', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: newSessionId }),
-      }).then(response => {
-        return response.json();
-      }).then(data => {
-      }).catch(error => {
-      });
+      apiRequest('POST', '/api/init-session', { session_id: newSessionId })
+        .then(response => {
+          return response.json();
+        }).then(data => {
+        }).catch(error => {
+        });
     }
     const cleanup = setupSessionCleanup();
     return cleanup;

@@ -82,30 +82,46 @@ def store_user_info():
         print(f"Session ID from request: {session_id}")
 
         # Extract and format user data
-        user_data = {
-            "age": data.get("age", ""),
-            "gender": data.get("gender", ""),
-            "favorite_categories": data.get("categories", []),
-            "interests": data.get("interests", ""),
-            "preferred_shopping_method": "online",  # Default since it's a web app
-            "user_location": data.get("location", ""),
-            "budget_range": (
-                f"{data.get('budgetMin', '')}-{data.get('budgetMax', '')}"
-                if data.get("budgetMin") is not None
-                and data.get("budgetMax") is not None
-                else ""
-            ),
-        }
+        try:
+            # Ensure categories is always a list
+            categories = data.get("categories", [])
+            if isinstance(categories, str):
+                categories = [categories]
+            elif not isinstance(categories, list):
+                categories = []
+            
+            user_data = {
+                "age": data.get("age", ""),
+                "gender": data.get("gender", ""),
+                "favorite_categories": categories,
+                "interests": data.get("interests", ""),
+                "preferred_shopping_method": "online",  # Default since it's a web app
+                "user_location": data.get("location", ""),
+                "budget_range": (
+                    f"{data.get('budgetMin', '')}-{data.get('budgetMax', '')}"
+                    if data.get("budgetMin") is not None and data.get("budgetMin") != ""
+                    and data.get("budgetMax") is not None and data.get("budgetMax") != ""
+                    else ""
+                ),
+            }
+            print(f"Formatted user_data: {user_data}")
+        except Exception as format_error:
+            print(f"Error formatting user data: {format_error}")
+            return jsonify({"status": "error", "message": f"Error formatting data: {str(format_error)}"}), 400
 
         # If session_id exists and is valid, update it; otherwise create new one
-        if session_id and session_id in user_sessions:
-            user_sessions[session_id]["user_data"] = user_data
-            print(f"Updated existing session: {session_id}")
-        else:
-            # Generate a new session ID if none provided or invalid
-            session_id = f"session_{len(user_sessions) + 1}"
-            user_sessions[session_id] = {"user_data": user_data}
-            print(f"Created new session: {session_id}")
+        try:
+            if session_id and session_id in user_sessions:
+                user_sessions[session_id]["user_data"] = user_data
+                print(f"Updated existing session: {session_id}")
+            else:
+                # Generate a new session ID if none provided or invalid
+                session_id = f"session_{len(user_sessions) + 1}"
+                user_sessions[session_id] = {"user_data": user_data}
+                print(f"Created new session: {session_id}")
+        except Exception as session_error:
+            print(f"Error managing session: {session_error}")
+            return jsonify({"status": "error", "message": f"Error managing session: {str(session_error)}"}), 500
 
         print(f"User data stored for session {session_id}: {user_data}")
         print(f"Total sessions after storing user info: {len(user_sessions)}")
@@ -131,6 +147,8 @@ def store_user_info():
         )
     except Exception as e:
         print(f"Error storing user info: {e}")
+        import traceback
+        print(f"Full traceback: {traceback.format_exc()}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
 

@@ -380,13 +380,21 @@ def process_recommendation_request(request_data):
         if not user_data or not user_data.get("favorite_categories"):
             return {"status": "error", "message": "No user data found. Please complete your profile first."}, 400
 
-        # Build user input string for Gemini prompt
+        # Build user input string for Gemini prompt with enhanced brand focus
+        preferred_brands = shopping_input.get('brandsPreferred', '').strip()
+        brand_emphasis = ""
+        if preferred_brands:
+            brands_list = [brand.strip() for brand in preferred_brands.split(',') if brand.strip()]
+            brand_emphasis = f"\nIMPORTANT: User specifically prefers these brands: {', '.join(brands_list)}"
+            brand_emphasis += f"\nPlease prioritize products from these brands when possible."
+        
         user_input = f"""
         Occasion: {shopping_input.get('occasion', '')}
-        Preferred Brands: {shopping_input.get('brandsPreferred', '')}
+        Preferred Brands: {preferred_brands}
         Shopping Request: {shopping_input.get('shoppingInput', '')}
         Favorite Categories: {', '.join(user_data.get('favorite_categories', []))}
         Interests or Hobbies: {user_data.get('interests', '')}
+        {brand_emphasis}
         """
 
         # Get categories from Gemini
@@ -397,7 +405,7 @@ def process_recommendation_request(request_data):
         if not categories:
             return {"status": "error", "message": "Failed to get categories from Gemini API"}, 500
 
-        # Filter and prioritize categories based on user request
+        # Filter and prioritize categories based on user request and brand preferences
         shopping_request = shopping_input.get('shoppingInput', '').lower()
         filtered_categories = []
         
@@ -446,15 +454,48 @@ def process_recommendation_request(request_data):
                 if user_cat.lower() in shopping_request:
                     break
         
-        # If we found a primary category, prioritize those categories
-        if primary_category:
-            primary_keywords = category_keywords[primary_category]
-            primary_categories = [cat for cat in categories if any(keyword in cat.lower() for keyword in primary_keywords)]
-            other_categories = [cat for cat in categories if not any(keyword in cat.lower() for keyword in primary_keywords)]
-            filtered_categories = primary_categories + other_categories
+        # Enhanced category filtering with brand priority
+        if preferred_brands and preferred_brands.strip():
+            brands = [brand.strip().lower() for brand in preferred_brands.split(',') if brand.strip()]
+            
+            # First, prioritize categories that contain brand names
+            brand_categories = []
+            other_categories = []
+            
+            for category in categories:
+                category_lower = category.lower()
+                brand_found = False
+                
+                for brand in brands:
+                    if brand in category_lower:
+                        brand_categories.append(category)
+                        brand_found = True
+                        break
+                
+                if not brand_found:
+                    other_categories.append(category)
+            
+            # If we found brand-specific categories, prioritize them
+            if brand_categories:
+                filtered_categories = brand_categories + other_categories
+            else:
+                # If no brand-specific categories, use primary category logic
+                if primary_category:
+                    primary_keywords = category_keywords[primary_category]
+                    primary_categories = [cat for cat in categories if any(keyword in cat.lower() for keyword in primary_keywords)]
+                    other_categories = [cat for cat in categories if not any(keyword in cat.lower() for keyword in primary_keywords)]
+                    filtered_categories = primary_categories + other_categories
+                else:
+                    filtered_categories = categories
         else:
-            # If no specific category detected, use original order
-            filtered_categories = categories
+            # If no brands specified, use original logic
+            if primary_category:
+                primary_keywords = category_keywords[primary_category]
+                primary_categories = [cat for cat in categories if any(keyword in cat.lower() for keyword in primary_keywords)]
+                other_categories = [cat for cat in categories if not any(keyword in cat.lower() for keyword in primary_keywords)]
+                filtered_categories = primary_categories + other_categories
+            else:
+                filtered_categories = categories
 
         # Limit categories to top 5 for faster processing
         filtered_categories = filtered_categories[:5]
@@ -481,18 +522,22 @@ def process_recommendation_request(request_data):
         category_products = {}
 
         def fetch_category_products(category):
+            # Extract preferred brands from shopping input
+            preferred_brands = shopping_input.get('brandsPreferred', '')
+            
             urls = amazon_category_top_products(
                 category,
                 amazon_domain,
-                num_results=1,  # Reduced from 2 to 1 for more conservative approach
+                num_results=2,  # Increased to get more products for better brand variety
                 budget_range=user_data.get("budget_range"),
+                preferred_brands=preferred_brands,  # Pass preferred brands to scraper
             )
             products = []
             if not urls:
                 return category, products
 
             # Increased max_workers for faster concurrent scraping
-            with ThreadPoolExecutor(max_workers=5) as executor:  # Reduced from 10 to 5
+            with ThreadPoolExecutor(max_workers=5) as executor:
                 futures = {
                     executor.submit(scrape_amazon_product, url): url for url in urls
                 }
@@ -501,6 +546,30 @@ def process_recommendation_request(request_data):
                     try:
                         product = future.result()
                         if product:
+                            # Enhanced brand filtering and scoring
+                            product_score = 0
+                            
+                            # Check if product title contains preferred brands
+                            if preferred_brands and preferred_brands.strip():
+                                brands = [brand.strip().lower() for brand in preferred_brands.split(',') if brand.strip()]
+                                product_title = product.get('title', '').lower()
+                                detected_brand = product.get('detected_brand', '').lower()
+                                
+                                # Check both title and detected brand
+                                for brand in brands:
+                                    # Exact brand match gets highest score
+                                    if brand == detected_brand:
+                                        product_score += 15  # Highest score for exact brand match
+                                        break
+                                    # Brand in title gets good score
+                                    elif brand in product_title:
+                                        product_score += 10  # High score for brand match in title
+                                        break
+                                    # Partial brand match gets lower score
+                                    elif any(brand_word in product_title for brand_word in brand.split()):
+                                        product_score += 5  # Medium score for partial brand match
+                                        break
+                            
                             # Filter products by budget range if price_value is available
                             budget_range = user_data.get("budget_range")
                             if budget_range and product.get("price_value") is not None:
@@ -514,17 +583,26 @@ def process_recommendation_request(request_data):
                                     low = float(low.strip())
                                     high = float(high.strip())
                                     if low <= product["price_value"] <= high:
-                                        products.append(product)
+                                        # Add budget score (closer to middle of range gets higher score)
+                                        budget_mid = (low + high) / 2
+                                        price_diff = abs(product["price_value"] - budget_mid)
+                                        budget_score = max(0, 5 - (price_diff / budget_mid) * 5)
+                                        product_score += budget_score
+                                        products.append((product, product_score))
                                 except:
                                     # If budget parsing fails, include product anyway
-                                    products.append(product)
+                                    products.append((product, product_score))
                             else:
                                 # If no price or budget, include product
-                                products.append(product)
+                                products.append((product, product_score))
                     except Exception as e:
                         print(f"Exception occurred while scraping URL {url}: {e}")
 
-            return category, products
+            # Sort products by score (brand matches first, then by budget fit)
+            products.sort(key=lambda x: x[1], reverse=True)
+            
+            # Return only the product objects (without scores)
+            return category, [product for product, score in products]
 
         # Scrape products for each category with increased concurrency
         with ThreadPoolExecutor(max_workers=3) as category_executor:  # Reduced from 7 to 3
@@ -875,6 +953,6 @@ def generate_fallback_products(shopping_request, user_data):
 
 if __name__ == "__main__":
     print("Starting Shopping Recommendation API...")
-    print("API will be available at: https://eventually-yours-shopping-app.onrender.com/")
-    print("Health check: https://eventually-yours-shopping-app.onrender.com/api/health")
+    print("API will be available at: https://eventually-yours-shopping-app-backend.onrender.com/")
+    print("Health check: https://eventually-yours-shopping-app-backend.onrender.com/api/health")
     app.run(debug=True, host="0.0.0.0", port=5000)

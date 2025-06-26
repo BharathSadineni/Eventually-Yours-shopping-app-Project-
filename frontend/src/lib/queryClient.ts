@@ -5,7 +5,7 @@ import { QueryClient } from "@tanstack/react-query";
  */
 export const queryClient = new QueryClient();
 
-const BACKEND_BASE_URL = "https://eventually-yours-shopping-app.onrender.com";
+const BACKEND_BASE_URL = "https://eventually-yours-shopping-app-backend.onrender.com";
 
 /**
  * Helper for making API requests.

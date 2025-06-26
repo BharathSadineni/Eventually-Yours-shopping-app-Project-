@@ -81,8 +81,6 @@ const formSchema = insertShoppingQuerySchema.extend({
 
 type FormData = z.infer<typeof formSchema>;
 
-const BACKEND_BASE_URL = "http://localhost:5000";
-
 export default function Shopping() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -249,11 +247,14 @@ export default function Shopping() {
                         <FormControl>
                           <Input
                             {...field}
-                            placeholder="Enter preferred brands (optional)"
+                            placeholder="e.g., Nike, Apple, Samsung (separate with commas)"
                             className="form-field"
                             autoComplete="off"
                           />
                         </FormControl>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                          Enter your preferred brands separated by commas. We'll prioritize products from these brands in your recommendations.
+                        </p>
                         <FormMessage />
                       </FormItem>
                     )}

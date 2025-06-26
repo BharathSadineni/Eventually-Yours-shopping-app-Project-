@@ -78,7 +78,7 @@ if __name__ == "__main__":
         email = input("Enter your email: ").strip()
 
     user_profile_details = fetch_user_profile(
-        "http://localhost:8000/api/user_profile/", username=username, email=email
+        "https://eventually-yours-shopping-app-backend.onrender.com/api/user_profile/", username=username, email=email
     )
     if not user_profile_details:
         print("Failed to fetch user profile details. Exiting.")

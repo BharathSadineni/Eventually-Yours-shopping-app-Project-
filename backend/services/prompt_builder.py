@@ -96,7 +96,7 @@ if __name__ == "__main__":
         print("Error: GEMINI_API_KEY environment variable not set")
         exit(1)
         
-    api_url = "http://localhost:8000/api/user_profile/"  # Adjust to your Django API URL
+    api_url = "https://eventually-yours-shopping-app-backend.onrender.com/api/user_profile/"  # Adjust to your Django API URL
 
     user_input = input("Enter your shopping input: ").strip()
     # user_location = input("Enter your location: ").strip()

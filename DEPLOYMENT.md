@@ -108,8 +108,8 @@ git push -u origin main
    Edit `frontend/src/lib/apiClient.ts`:
    ```typescript
    const API_BASE_URL = process.env.NODE_ENV === 'production' 
-     ? 'https://eventually-yours-shopping-app.onrender.com' 
-     : 'https://eventually-yours-shopping-app.onrender.com';
+     ? 'https://eventually-yours-shopping-app-backend.onrender.com' 
+     : 'https://eventually-yours-shopping-app-backend.onrender.com';
    ```
 
 2. **Redeploy Frontend**:

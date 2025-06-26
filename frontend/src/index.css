@@ -1,0 +1,337 @@
+/* stylelint-disable at-rule-no-unknown */
+/* stylelint-disable at-rule-empty-line-before */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+/* stylelint-enable at-rule-no-unknown */
+/* stylelint-enable at-rule-empty-line-before */
+
+:root {
+  --background: hsl(0, 0%, 100%);
+  --foreground: hsl(240, 10%, 3.9%);
+  --muted: hsl(240, 4.8%, 95.9%);
+  --muted-foreground: hsl(240, 3.8%, 46.1%);
+  --popover: hsl(0, 0%, 100%);
+  --popover-foreground: hsl(240, 10%, 3.9%);
+  --card: hsl(0, 0%, 100%);
+  --card-foreground: hsl(240, 10%, 3.9%);
+  --border: hsl(240, 5.9%, 90%);
+  --input: hsl(240, 5.9%, 90%);
+  --primary: hsl(45, 100%, 51%);
+  --primary-foreground: hsl(0, 0%, 100%);
+  --secondary: hsl(45, 100%, 97%);
+  --secondary-foreground: hsl(45, 100%, 15%);
+  --accent: hsl(21, 100%, 97%);
+  --accent-foreground: hsl(21, 85%, 25%);
+  --destructive: hsl(0, 84.2%, 60.2%);
+  --destructive-foreground: hsl(60, 9.1%, 97.8%);
+  --ring: hsl(45, 100%, 51%);
+  --radius: 0.5rem;
+  
+  /* Gold/Orange theme colors */
+  --primary-gold: hsl(45, 100%, 51%);
+  --primary-gold-light: hsl(45, 100%, 97%);
+  --primary-gold-dark: hsl(45, 100%, 41%);
+  --primary-orange: hsl(21, 92%, 57%);
+  --primary-orange-light: hsl(21, 100%, 97%);
+  --primary-orange-dark: hsl(21, 85%, 47%);
+  --neutral-50: hsl(210, 40%, 98%);
+  --neutral-100: hsl(210, 40%, 96%);
+  --neutral-900: hsl(210, 11%, 15%);
+}
+
+.dark {
+  --background: hsl(240, 10%, 3.9%);
+  --foreground: hsl(0, 0%, 98%);
+  --muted: hsl(240, 3.7%, 15.9%);
+  --muted-foreground: hsl(240, 5%, 64.9%);
+  --popover: hsl(240, 10%, 3.9%);
+  --popover-foreground: hsl(0, 0%, 98%);
+  --card: hsl(240, 10%, 3.9%);
+  --card-foreground: hsl(0, 0%, 98%);
+  --border: hsl(240, 3.7%, 15.9%);
+  --input: hsl(240, 3.7%, 15.9%);
+  --primary: hsl(45, 100%, 51%);
+  --primary-foreground: hsl(0, 0%, 100%);
+  --secondary: hsl(240, 3.7%, 15.9%);
+  --secondary-foreground: hsl(0, 0%, 98%);
+  --accent: hsl(240, 3.7%, 15.9%);
+  --accent-foreground: hsl(0, 0%, 98%);
+  --destructive: hsl(0, 62.8%, 30.6%);
+  --destructive-foreground: hsl(0, 0%, 98%);
+  --ring: hsl(240, 4.9%, 83.9%);
+}
+
+@layer base {
+  * {
+    /* stylelint-disable-next-line at-rule-no-unknown */
+    @apply border-border;
+  }
+
+  body {
+    /* stylelint-disable-next-line at-rule-no-unknown */
+    @apply font-sans antialiased bg-background text-foreground;
+    font-family: 'Space Grotesk', 'JetBrains Mono', system-ui, sans-serif;
+    font-weight: 400;
+    letter-spacing: -0.02em;
+  }
+}
+
+/* Custom font classes for Tame Impala/Git aesthetic */
+.font-display {
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+
+.font-mono {
+  font-family: 'JetBrains Mono', 'Space Grotesk', monospace;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+}
+
+.font-heading {
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  text-transform: uppercase;
+}
+
+.font-body {
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: hsl(210, 40%, 96%);
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(240, 5%, 64.9%);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(240, 5%, 44.9%);
+}
+
+/* Dark mode - only change colors */
+.dark ::-webkit-scrollbar-track {
+  background: black;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: hsl(45, 100%, 51%);
+}
+
+/* Custom animations */
+@keyframes typewriter {
+  0%, 100% { 
+    width: 0;
+    border-right: 2px solid hsl(45, 100%, 51%);
+  }
+  50% { 
+    width: 100%;
+    border-right: 2px solid hsl(45, 100%, 51%);
+  }
+}
+
+@keyframes fadeIn {
+  0% { 
+    opacity: 0; 
+    transform: translateY(20px); 
+  }
+  100% { 
+    opacity: 1; 
+    transform: translateY(0); 
+  }
+}
+
+@keyframes slideUp {
+  0% { 
+    opacity: 0; 
+    transform: translateY(40px); 
+  }
+  100% { 
+    opacity: 1; 
+    transform: translateY(0); 
+  }
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes barrel-roll {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+  20%, 40%, 60%, 80% { transform: translateX(5px); }
+}
+
+.typewriter {
+  overflow: hidden;
+  white-space: nowrap;
+  animation: typewriter 4s steps(40) infinite;
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.6s ease-out;
+}
+
+.animate-slide-up {
+  animation: slideUp 0.8s ease-out;
+}
+
+.animate-pulse-slow {
+  animation: pulse 3s infinite;
+}
+
+.barrel-roll {
+  animation: barrel-roll 1s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.animate-shake {
+  animation: shake 0.5s ease-in-out;
+}
+
+/* Professional button effects */
+.btn-primary {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 25px rgba(255, 193, 7, 0.3);
+}
+
+/* Remove default focus outline and box-shadow for all form fields */
+input:focus, textarea:focus, select:focus {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* Existing form field focus effect */
+.form-field:focus {
+  box-shadow: 0 0 0 3px hsla(45, 100%, 51%, 0.1);
+  border-color: hsl(45, 100%, 51%);
+}
+
+/* Feature card hover effects */
+.feature-card {
+  transition: all 0.3s ease;
+}
+
+.feature-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+}
+
+/* Loading spinner */
+.spinner {
+  border: 3px solid hsl(210, 40%, 96%);
+  border-top: 3px solid hsl(45, 100%, 51%);
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  animation: spin 1s linear infinite;
+}
+
+/* Page transitions */
+.page-transition {
+  transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Gradient backgrounds */
+.gradient-gold {
+  background: linear-gradient(135deg, hsl(45, 100%, 97%) 0%, hsl(0, 0%, 100%) 100%);
+}
+
+.gradient-orange {
+  background: linear-gradient(135deg, hsl(31, 100%, 85%) 0%, hsl(45, 100%, 80%) 100%) !important;
+}
+
+/* Dark mode support */
+.dark-mode-toggle {
+  position: fixed;
+  top: 80px;
+  right: 20px;
+  z-index: 1000;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  border: none;
+  border-radius: 50%;
+  width: 50px;
+  height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.dark-mode-toggle:hover {
+  transform: scale(1.1);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+}
+
+/* Custom font classes for Tame Impala/Git aesthetic */
+.font-display {
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+
+.font-mono {
+  font-family: 'JetBrains Mono', 'Space Grotesk', monospace;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+}
+
+.font-heading {
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  text-transform: uppercase;
+}
+
+.font-body {
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+
+/* Remove focus outline for custom select triggers (Radix, Shadcn, etc) */
+select:focus, select:focus-visible, select:active,
+.select-trigger:focus, .select-trigger:focus-visible, .select-trigger:active,
+.SelectTrigger:focus, .SelectTrigger:focus-visible, .SelectTrigger:active,
+.select__control:focus, .select__control:focus-visible, .select__control:active,
+.SelectTrigger[data-state="open"], .select-trigger[data-state="open"] {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+*:focus, *:focus-visible, *:active {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* Prevent horizontal scrollbar and page shift during barrel roll */
+html.barrel-roll, body.barrel-roll, #root.barrel-roll {
+  overflow-x: hidden !important;
+  width: 100vw !important;
+  position: fixed !important;
+  left: 0; top: 0;
+}

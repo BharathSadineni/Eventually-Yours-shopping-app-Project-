@@ -114,7 +114,7 @@ def create_brand_specific_search_url(amazon_domain, category, brand, budget_rang
 
 def amazon_category_top_products(category, amazon_domain, num_results=3, budget_range=None, preferred_brands=None):
     """
-    Get top products from Amazon category search with improved brand integration and better error handling
+    Get top products from Amazon category search with optimized performance and brand integration
     """
     try:
         print(f"Searching for category: {category} on {amazon_domain}")
@@ -128,36 +128,31 @@ def amazon_category_top_products(category, amazon_domain, num_results=3, budget_
         if not amazon_domain.startswith('http'):
             amazon_domain = f"https://{amazon_domain}"
         
-        # Build search queries with brand integration
-        search_queries = []
+        # Optimized search strategy: limit to 2-3 most effective searches
         search_urls = []
         
-        # If brands are specified, create brand-specific searches
+        # If brands are specified, create only the most effective brand-specific search
         if preferred_brands and preferred_brands.strip():
             brands = [brand.strip() for brand in preferred_brands.split(',') if brand.strip()]
             
-            # Create brand-specific search URLs for better targeting
-            for brand in brands[:3]:  # Limit to top 3 brands to avoid too many requests
+            # Only use the first brand for maximum efficiency
+            if brands:
+                brand = brands[0]
                 brand_url = create_brand_specific_search_url(amazon_domain, category, brand, budget_range)
                 if brand_url:
                     search_urls.append((f"{brand} {category}", brand_url))
-                
-                # Also try category with brand as a filter
-                category_brand_query = f"{category} {brand}"
-                if category_brand_query not in [q[0] for q in search_urls]:
-                    search_urls.append((category_brand_query, None))  # Will be built later
         
-        # Always include the original category search
-        if category not in [q[0] for q in search_urls]:
-            search_urls.append((category, None))
+        # Always include the original category search (most reliable)
+        search_urls.append((category, None))
         
-        # Limit total queries to avoid too many requests
-        search_urls = search_urls[:5]
+        # Limit to maximum 2 searches for speed
+        search_urls = search_urls[:2]
         
         all_product_urls = []
         seen_urls = set()
         
-        for search_query, prebuilt_url in search_urls:
+        # Use concurrent requests for faster processing
+        def fetch_search_results(search_query, prebuilt_url):
             print(f"Searching with query: {search_query}")
             
             # Use prebuilt URL if available, otherwise build it
@@ -176,32 +171,31 @@ def amazon_category_top_products(category, amazon_domain, num_results=3, budget_
                         high = float(high.strip())
                         search_url += f"&rh=p_36%3A{int(low*100)}-{int(high*100)}"
                     except:
-                        pass  # Continue without budget filter if parsing fails
+                        pass
                 
-                # Add brand filter if we have specific brands (only for non-prebuilt URLs)
+                # Add brand filter if we have specific brands
                 if preferred_brands and preferred_brands.strip() and not prebuilt_url:
                     brands = [brand.strip() for brand in preferred_brands.split(',') if brand.strip()]
                     if brands:
-                        # Add brand filter to URL
                         brand_filter = "&rh=p_89%3A" + "%7C".join([quote_plus(brand) for brand in brands[:2]])
                         search_url += brand_filter
             
             print(f"Search URL: {search_url}")
             
-            # Make request with realistic headers and retry logic
-            max_retries = 3
+            # Reduced retry attempts for speed
+            max_retries = 2
             for attempt in range(max_retries):
                 try:
-                    response = requests.get(search_url, headers=headers, timeout=15)
+                    response = requests.get(search_url, headers=headers, timeout=10)  # Reduced timeout
                     
                     if response.status_code == 503:
                         print(f"503 error on attempt {attempt + 1} for {search_query}, retrying...")
                         if attempt < max_retries - 1:
-                            time.sleep(random.uniform(2, 5))  # Random delay
+                            time.sleep(random.uniform(1, 2))  # Reduced delay
                             continue
                         else:
                             print(f"Max retries reached for {search_query}, skipping...")
-                            break
+                            return []
                     
                     response.raise_for_status()
                     break
@@ -209,22 +203,18 @@ def amazon_category_top_products(category, amazon_domain, num_results=3, budget_
                 except requests.exceptions.RequestException as e:
                     print(f"Request error on attempt {attempt + 1} for {search_query}: {e}")
                     if attempt < max_retries - 1:
-                        time.sleep(random.uniform(1, 3))
+                        time.sleep(random.uniform(0.5, 1))  # Reduced delay
                         continue
                     else:
                         print(f"Max retries reached for {search_query}, skipping...")
-                        break
+                        return []
             
             soup = BeautifulSoup(response.content, 'html.parser')
             
-            # Multiple selectors for product links with better fallbacks
+            # Optimized product extraction with fewer selectors
             product_selectors = [
                 'a[href*="/dp/"]',
-                'a[href*="/gp/product/"]',
-                'a[data-component-type="s-search-result"]',
                 '.s-result-item a[href*="/dp/"]',
-                '.s-result-item a[href*="/gp/product/"]',
-                '.s-search-results a[href*="/dp/"]',
                 '[data-component-type="s-search-result"] a[href*="/dp/"]'
             ]
             
@@ -251,42 +241,37 @@ def amazon_category_top_products(category, amazon_domain, num_results=3, budget_
                                 seen_urls.add(clean_url)
                                 product_urls.append(clean_url)
                                 
-                                if len(product_urls) >= num_results:
+                                if len(product_urls) >= num_results * 2:  # Get more products for better selection
                                     break
                 
-                if len(product_urls) >= num_results:
+                if len(product_urls) >= num_results * 2:
                     break
             
-            # If no products found with selectors, try alternative approach
-            if not product_urls:
-                print(f"No products found with selectors for {search_query}, trying alternative approach")
-                # Look for any links containing product IDs
-                all_links = soup.find_all('a', href=True)
-                for link in all_links:
-                    href = link.get('href', '')
-                    if '/dp/' in href:
-                        product_id_match = re.search(r'/dp/([A-Z0-9]{10})', href)
-                        if product_id_match:
-                            product_id = product_id_match.group(1)
-                            clean_url = f"{amazon_domain}/dp/{product_id}"
-                            if clean_url not in seen_urls:
-                                seen_urls.add(clean_url)
-                                product_urls.append(clean_url)
-                                if len(product_urls) >= num_results:
-                                    break
+            return product_urls
+        
+        # Execute searches concurrently for better performance
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            futures = [
+                executor.submit(fetch_search_results, search_query, prebuilt_url)
+                for search_query, prebuilt_url in search_urls
+            ]
             
-            all_product_urls.extend(product_urls)
-            
-            # Add small delay to avoid rate limiting
-            time.sleep(random.uniform(0.5, 1.5))
-            
-            # If we have enough products, stop searching
-            if len(all_product_urls) >= num_results * 2:  # Get extra products for better variety
-                break
+            for future in as_completed(futures):
+                try:
+                    product_urls = future.result()
+                    all_product_urls.extend(product_urls)
+                    
+                    # If we have enough products, stop waiting for other searches
+                    if len(all_product_urls) >= num_results * 3:
+                        break
+                        
+                except Exception as e:
+                    print(f"Error in concurrent search: {e}")
         
         print(f"Found {len(all_product_urls)} total product URLs for category: {category}")
         
-        return all_product_urls[:num_results * 2]  # Return extra products for better selection
+        # Return optimized number of products
+        return all_product_urls[:num_results * 2]
         
     except Exception as e:
         print(f"Error in amazon_category_top_products for {category}: {e}")
@@ -323,7 +308,7 @@ def parse_price_to_float(price_str):
 
 def scrape_amazon_product(url):
     """
-    Scrape individual Amazon product page with improved brand detection and error handling
+    Scrape individual Amazon product page with optimized performance and brand detection
     """
     try:
         print(f"Scraping product: {url}")
@@ -331,16 +316,16 @@ def scrape_amazon_product(url):
         # Use realistic headers to avoid detection
         headers = get_realistic_headers()
         
-        # Make request with retry logic
-        max_retries = 3
+        # Reduced retry attempts for speed
+        max_retries = 2
         for attempt in range(max_retries):
             try:
-                response = requests.get(url, headers=headers, timeout=10)
+                response = requests.get(url, headers=headers, timeout=8)  # Reduced timeout
                 
                 if response.status_code == 503:
                     print(f"503 error on attempt {attempt + 1} for {url}, retrying...")
                     if attempt < max_retries - 1:
-                        time.sleep(random.uniform(2, 4))  # Random delay
+                        time.sleep(random.uniform(1, 2))  # Reduced delay
                         continue
                     else:
                         print(f"Max retries reached for {url}, returning None")
@@ -352,7 +337,7 @@ def scrape_amazon_product(url):
             except requests.exceptions.RequestException as e:
                 print(f"Request error on attempt {attempt + 1} for {url}: {e}")
                 if attempt < max_retries - 1:
-                    time.sleep(random.uniform(1, 3))
+                    time.sleep(random.uniform(0.5, 1))  # Reduced delay
                     continue
                 else:
                     print(f"Max retries reached for {url}, returning None")
@@ -360,18 +345,15 @@ def scrape_amazon_product(url):
         
         soup = BeautifulSoup(response.content, 'html.parser')
         
-        # Extract product information with multiple selectors
+        # Extract product information with optimized selectors
         product_data = {}
         
-        # Title extraction with multiple selectors
+        # Title extraction with optimized selectors
         title_selectors = [
             '#productTitle',
             'h1.a-size-large',
-            'h1.a-size-base-plus',
-            '.a-size-large.product-title-word-break',
             'span#productTitle',
-            'h1[data-automation-id="product-title"]',
-            '.a-size-large.a-spacing-none.a-color-base'
+            'h1[data-automation-id="product-title"]'
         ]
         
         for selector in title_selectors:
@@ -380,40 +362,23 @@ def scrape_amazon_product(url):
                 product_data['title'] = title_elem.get_text().strip()
                 break
         
-        # Enhanced brand extraction from title
+        # Quick brand extraction from title (simplified for speed)
         if product_data.get('title'):
             title = product_data['title']
             
-            # Common brand patterns in Amazon titles
-            brand_patterns = [
-                r'^([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)',  # Brand at start (e.g., "Nike Air Max")
-                r'by\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)',  # "by Brand" pattern
-                r'from\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)',  # "from Brand" pattern
-                r'([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\s+[0-9]',  # Brand followed by model number
-            ]
-            
-            detected_brand = None
-            for pattern in brand_patterns:
-                match = re.search(pattern, title, re.IGNORECASE)
-                if match:
-                    detected_brand = match.group(1).strip()
-                    # Clean up common words that aren't brands
-                    if detected_brand.lower() not in ['the', 'new', 'best', 'top', 'premium', 'quality']:
-                        break
-            
-            if detected_brand:
-                product_data['detected_brand'] = detected_brand
+            # Simple brand detection: first capitalized word(s) at start
+            brand_match = re.match(r'^([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)', title)
+            if brand_match:
+                detected_brand = brand_match.group(1).strip()
+                # Filter out common non-brand words
+                if detected_brand.lower() not in ['the', 'new', 'best', 'top', 'premium', 'quality']:
+                    product_data['detected_brand'] = detected_brand
         
-        # Price extraction with multiple selectors
+        # Price extraction with optimized selectors
         price_selectors = [
             '.a-price-whole',
             '.a-price .a-offscreen',
-            '.a-price-range .a-offscreen',
-            '.a-price .a-price-whole',
-            'span.a-price-whole',
-            '.a-price.a-text-price .a-offscreen',
-            '#priceblock_ourprice',
-            '#priceblock_dealprice'
+            '#priceblock_ourprice'
         ]
         
         for selector in price_selectors:
@@ -430,15 +395,11 @@ def scrape_amazon_product(url):
                     except ValueError:
                         continue
         
-        # Image extraction with multiple selectors
+        # Image extraction with optimized selectors
         image_selectors = [
             '#landingImage',
             '.a-dynamic-image',
-            'img#imgBlkFront',
-            '.a-image-stretch img',
-            '#main-image',
-            '.a-image-container img',
-            '[data-old-hires]'
+            'img#imgBlkFront'
         ]
         
         for selector in image_selectors:
@@ -449,27 +410,16 @@ def scrape_amazon_product(url):
                     product_data['image_url'] = img_src
                     break
         
-        # Rating extraction with multiple selectors
-        rating_selectors = [
-            '.a-icon-alt',
-            '.a-star-rating-text',
-            'span[data-hook="rating-out-of-text"]',
-            '.a-icon-star-small .a-icon-alt',
-            'i[class*="a-star"] span',
-            '.a-icon-alt[class*="a-star"]'
-        ]
-        
-        for selector in rating_selectors:
-            rating_elem = soup.select_one(selector)
-            if rating_elem:
-                rating_text = rating_elem.get_text().strip()
-                rating_match = re.search(r'(\d+\.?\d*)', rating_text)
-                if rating_match:
-                    try:
-                        product_data['average_rating'] = float(rating_match.group(1))
-                        break
-                    except ValueError:
-                        continue
+        # Quick rating extraction
+        rating_elem = soup.select_one('.a-icon-alt')
+        if rating_elem:
+            rating_text = rating_elem.get_text().strip()
+            rating_match = re.search(r'(\d+\.?\d*)', rating_text)
+            if rating_match:
+                try:
+                    product_data['average_rating'] = float(rating_match.group(1))
+                except ValueError:
+                    pass
         
         # Add URL to product data
         product_data['url'] = url
@@ -483,8 +433,8 @@ def scrape_amazon_product(url):
         if product_data.get('detected_brand'):
             print(f"Detected brand: {product_data.get('detected_brand')}")
         
-        # Add small delay to avoid rate limiting
-        time.sleep(random.uniform(0.2, 0.8))
+        # Minimal delay to avoid rate limiting
+        time.sleep(random.uniform(0.1, 0.3))  # Significantly reduced delay
         
         return product_data
         

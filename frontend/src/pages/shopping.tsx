@@ -193,14 +193,14 @@ export default function Shopping() {
                   ).join(", ")
               }
             </h1>
-            <p className="text-gray-600 dark:text-muted-foreground">Tell us what you're looking for today</p>
+            <p className="text-gray-600 dark:text-muted-foreground">What you're looking for today?</p>
           </div>
         )}
 
         <Card className="bg-white dark:bg-card rounded-xl shadow-lg border border-gray-100 dark:border-border mb-8">
         <CardHeader className="bg-yellow-400 text-white">
           <CardTitle className="text-2xl font-heading mb-2">Enter Your Shopping Input</CardTitle>
-          <p className="text-white/90 font-body">Describe what you're looking for and we'll find the perfect recommendations</p>
+          <p className="text-white/90 font-body">Describe what you're looking for and find the perfect recommendations for you</p>
         </CardHeader>
 
           <CardContent className="p-8">
@@ -253,7 +253,7 @@ export default function Shopping() {
                           />
                         </FormControl>
                         <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                          Enter your preferred brands separated by commas. We'll prioritize products from these brands in your recommendations.
+                          Enter your preferred brands separated by commas. They will be prioritized in your recommendations.
                         </p>
                         <FormMessage />
                       </FormItem>
@@ -359,7 +359,7 @@ export default function Shopping() {
                           src={
                             recommendation.image?.startsWith("http")
                               ? recommendation.image
-                              : BACKEND_BASE_URL + recommendation.image
+                              : recommendation.image
                           }
                           alt={recommendation.name}
                           className="w-full h-48 object-contain mb-4 rounded"
@@ -381,7 +381,7 @@ export default function Shopping() {
                             onClick={() => window.open(
                               recommendation.buyUrl?.startsWith("http")
                                 ? recommendation.buyUrl
-                                : BACKEND_BASE_URL + recommendation.buyUrl,
+                                : recommendation.buyUrl,
                               "_blank"
                             )}
                           >

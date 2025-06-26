@@ -220,9 +220,9 @@ def get_shopping_recommendations():
             # Submit request to worker pool for concurrent processing
             future = worker_pool.submit(process_recommendation_request, data)
             
-            # Wait for result with timeout
+            # Wait for result with reduced timeout for faster response
             try:
-                result = future.result(timeout=120)  # 2 minute timeout
+                result = future.result(timeout=60)  # Reduced from 120 to 60 seconds
                 
                 # Remove from active requests
                 with processing_lock:
@@ -497,8 +497,8 @@ def process_recommendation_request(request_data):
             else:
                 filtered_categories = categories
 
-        # Limit categories to top 5 for faster processing
-        filtered_categories = filtered_categories[:5]
+        # Limit categories to top 3 for faster processing (reduced from 5)
+        filtered_categories = filtered_categories[:3]
         
         # Clean category names for better scraping
         cleaned_categories = []
@@ -528,7 +528,7 @@ def process_recommendation_request(request_data):
             urls = amazon_category_top_products(
                 category,
                 amazon_domain,
-                num_results=2,  # Increased to get more products for better brand variety
+                num_results=1,  # Reduced to 1 for faster processing
                 budget_range=user_data.get("budget_range"),
                 preferred_brands=preferred_brands,  # Pass preferred brands to scraper
             )
@@ -537,7 +537,7 @@ def process_recommendation_request(request_data):
                 return category, products
 
             # Increased max_workers for faster concurrent scraping
-            with ThreadPoolExecutor(max_workers=5) as executor:
+            with ThreadPoolExecutor(max_workers=8) as executor:  # Increased from 5 to 8
                 futures = {
                     executor.submit(scrape_amazon_product, url): url for url in urls
                 }
@@ -605,7 +605,7 @@ def process_recommendation_request(request_data):
             return category, [product for product, score in products]
 
         # Scrape products for each category with increased concurrency
-        with ThreadPoolExecutor(max_workers=3) as category_executor:  # Reduced from 7 to 3
+        with ThreadPoolExecutor(max_workers=3) as category_executor:  # Keep at 3 for category processing
             category_futures = [
                 category_executor.submit(fetch_category_products, category)
                 for category in categories
@@ -621,6 +621,10 @@ def process_recommendation_request(request_data):
 
         # Check if we have any real scraped products
         valid_products = [p for p in all_products if p and p.get("title") and p.get("url")]
+        
+        # Limit products for faster AI processing (top 8 products)
+        if len(valid_products) > 8:
+            valid_products = valid_products[:8]
         
         # Get currency symbol (moved here to fix scope issue)
         currency_symbol = get_currency_symbol(user_data.get("user_location", ""))
@@ -738,8 +742,8 @@ def process_recommendation_request(request_data):
 
             # If no AI recommendations matched with scraped data, use scraped products directly
             if not formatted_products and valid_products:
-                # Limit to top 6 products for faster processing
-                for i, product in enumerate(valid_products[:6]):
+                # Limit to top 4 products for faster processing (reduced from 6)
+                for i, product in enumerate(valid_products[:4]):
                     rating = 0
                     try:
                         rating_str = str(product.get("average_rating", "0"))
@@ -786,8 +790,8 @@ def process_recommendation_request(request_data):
             # Only use scraped products if they exist and are valid
             if valid_products:
                 fallback_products = []
-                # Limit to top 6 products for faster processing
-                for i, product in enumerate(valid_products[:6]):
+                # Limit to top 4 products for faster processing (reduced from 6)
+                for i, product in enumerate(valid_products[:4]):
                     rating = 0
                     try:
                         rating_str = str(product.get("average_rating", "0"))

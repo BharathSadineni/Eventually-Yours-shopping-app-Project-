@@ -92,3 +92,6 @@ frontend/build/
 # Temporary files
 *.tmp
 *.temp
+
+# Allow queryClient.ts to be tracked even if lib/ is ignored somewhere
+!frontend/src/lib/queryClient.ts

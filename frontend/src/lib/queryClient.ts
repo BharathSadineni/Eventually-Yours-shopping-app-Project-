@@ -11,8 +11,11 @@ const BACKEND_BASE_URL = "https://eventually-yours-shopping-app-backend.onrender
  * Helper for making API requests.
  * @param method HTTP method (GET, POST, etc.)
  * @param url API endpoint (relative to /api)
- * @param body Optional request body (object)
+ * @param body Optional request body (object, NOT string or FormData)
  * @param options Optional fetch options (headers, etc.)
+ *
+ * DO NOT pass JSON.stringify(body) or FormData as the body. Always pass a plain object.
+ * Example: apiRequest('POST', '/api/user-info', { age: 25 })
  */
 export async function apiRequest(
   method: string,
@@ -20,6 +23,17 @@ export async function apiRequest(
   body?: any,
   options: RequestInit = {}
 ) {
+  // Runtime check: Only allow plain objects or undefined/null as body
+  if (
+    body !== undefined &&
+    (typeof body === "string" ||
+      (typeof window !== "undefined" && body instanceof window.FormData))
+  ) {
+    throw new Error(
+      "[apiRequest] Invalid body: Do NOT pass JSON.stringify or FormData. Pass a plain object."
+    );
+  }
+
   const fetchOptions: RequestInit = {
     method,
     headers: {

@@ -281,4 +281,4 @@ def test_amazon_scraper():
 
 if __name__ == "__main__":
     # Test the scraper
-    test_amazon_scraper() 
+    test_amazon_scraper()

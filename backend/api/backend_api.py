@@ -14,7 +14,17 @@ from queue import Queue
 
 app = Flask(__name__)
 app.config['APP_NAME'] = 'Eventually Yours Shopping App'
-CORS(app)  # Enable CORS for all routes
+
+# Configure CORS with more permissive settings
+CORS(app, resources={
+    r"/api/*": {
+        "origins": ["*"],
+        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization", "X-Session-Id", "X-Requested-With"],
+        "expose_headers": ["Content-Type", "X-Session-Id"],
+        "supports_credentials": True
+    }
+})
 
 # Load environment variables
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
@@ -42,9 +52,17 @@ def health_check():
     })
 
 
-@app.route("/api/init-session", methods=["POST"])
+@app.route("/api/init-session", methods=["POST", "OPTIONS"])
 def init_session():
     """Initialize a new session when user lands on the page"""
+    if request.method == "OPTIONS":
+        # Handle preflight request
+        response = jsonify({"status": "ok"})
+        response.headers.add("Access-Control-Allow-Origin", "*")
+        response.headers.add("Access-Control-Allow-Headers", "Content-Type,Authorization,X-Session-Id")
+        response.headers.add("Access-Control-Allow-Methods", "POST,OPTIONS")
+        return response
+        
     try:
         data = request.get_json()
         session_id = data.get("session_id")
@@ -70,11 +88,41 @@ def init_session():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
-@app.route("/api/user-info", methods=["POST"])
+@app.route("/api/user-info", methods=["POST", "OPTIONS"])
 def store_user_info():
     """Store user information from the frontend"""
+    if request.method == "OPTIONS":
+        # Handle preflight request
+        response = jsonify({"status": "ok"})
+        response.headers.add("Access-Control-Allow-Origin", "*")
+        response.headers.add("Access-Control-Allow-Headers", "Content-Type,Authorization,X-Session-Id")
+        response.headers.add("Access-Control-Allow-Methods", "POST,OPTIONS")
+        return response
+        
     try:
+        # Debug: Log request details
+        print(f"Request method: {request.method}")
+        print(f"Request headers: {dict(request.headers)}")
+        print(f"Request content type: {request.content_type}")
+        print(f"Request content length: {request.content_length}")
+        
+        # Check if request has JSON content
+        if not request.is_json:
+            print("Error: Request is not JSON")
+            return jsonify({
+                "status": "error", 
+                "message": "Content-Type must be application/json",
+                "received_content_type": request.content_type
+            }), 415
+        
         data = request.get_json()
+        if data is None:
+            print("Error: Failed to parse JSON data")
+            return jsonify({
+                "status": "error", 
+                "message": "Invalid JSON data"
+            }), 400
+            
         print(f"Received user info data: {data}")
         
         # Check for session ID in headers first, then in data
@@ -212,11 +260,41 @@ def parse_ai_recommendations(sorted_products_text):
     return ai_recommendations
 
 
-@app.route("/api/shopping-recommendations", methods=["POST"])
+@app.route("/api/shopping-recommendations", methods=["POST", "OPTIONS"])
 def get_shopping_recommendations():
     """Get product recommendations based on user input and stored user data"""
+    if request.method == "OPTIONS":
+        # Handle preflight request
+        response = jsonify({"status": "ok"})
+        response.headers.add("Access-Control-Allow-Origin", "*")
+        response.headers.add("Access-Control-Allow-Headers", "Content-Type,Authorization,X-Session-Id")
+        response.headers.add("Access-Control-Allow-Methods", "POST,OPTIONS")
+        return response
+        
     try:
+        # Debug: Log request details
+        print(f"Request method: {request.method}")
+        print(f"Request headers: {dict(request.headers)}")
+        print(f"Request content type: {request.content_type}")
+        print(f"Request content length: {request.content_length}")
+        
+        # Check if request has JSON content
+        if not request.is_json:
+            print("Error: Request is not JSON")
+            return jsonify({
+                "status": "error", 
+                "message": "Content-Type must be application/json",
+                "received_content_type": request.content_type
+            }), 415
+        
         data = request.get_json()
+        if data is None:
+            print("Error: Failed to parse JSON data")
+            return jsonify({
+                "status": "error", 
+                "message": "Invalid JSON data"
+            }), 400
+            
         session_id = data.get("session_id")
         print(f"Received session_id: {session_id}")
         print(f"Available sessions: {list(user_sessions.keys())}")

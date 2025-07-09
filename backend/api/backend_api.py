@@ -11,6 +11,7 @@ from services.sorting_algorithm import SortingAlgorithm
 import re
 from threading import Lock
 from queue import Queue
+import random
 
 app = Flask(__name__)
 app.config['APP_NAME'] = 'Eventually Yours Shopping App'
@@ -38,8 +39,8 @@ processing_lock = Lock()
 active_requests = {}
 request_results = {}
 
-# Worker pool for concurrent processing
-worker_pool = ThreadPoolExecutor(max_workers=3)  # Handle 3 concurrent requests
+# Worker pool for concurrent processing - reduced for deployment
+worker_pool = ThreadPoolExecutor(max_workers=2)  # Reduced from 3 to 2
 
 
 @app.route("/api/health", methods=["GET"])
@@ -318,7 +319,7 @@ def get_shopping_recommendations():
             
             # Wait for result with reduced timeout for faster response
             try:
-                result = future.result(timeout=60)  # Reduced from 120 to 60 seconds
+                result = future.result(timeout=45)  # Reduced from 60 to 45 seconds
                 
                 # Remove from active requests
                 with processing_lock:
@@ -593,8 +594,8 @@ def process_recommendation_request(request_data):
             else:
                 filtered_categories = categories
 
-        # Limit categories to top 3 for faster processing (reduced from 5)
-        filtered_categories = filtered_categories[:3]
+        # Process all categories for maximum variety - let Gemini select the best
+        filtered_categories = filtered_categories
         
         # Clean category names for better scraping
         cleaned_categories = []
@@ -625,7 +626,7 @@ def process_recommendation_request(request_data):
             scraped_products = amazon_category_top_products(
                 category,
                 amazon_domain,
-                num_results=3,  # Get 3 products per category for better selection
+                num_results=random.randint(3, 6),  # Variable number for better variety
                 budget_range=user_data.get("budget_range"),
                 preferred_brands=preferred_brands,  # Pass preferred brands to scraper
             )
@@ -691,15 +692,10 @@ def process_recommendation_request(request_data):
             # Return only the product objects (without scores)
             return category, [product for product, score in scored_products]
 
-        # Reduced concurrency to avoid rate limiting
-        with ThreadPoolExecutor(max_workers=2) as category_executor:  # Reduced from 3 to 2
-            category_futures = [
-                category_executor.submit(fetch_category_products, category)
-                for category in categories
-            ]
-            for future in as_completed(category_futures):
-                category, products = future.result()
-                category_products[category] = products
+        # Process categories sequentially to avoid rate limiting
+        for category in categories:
+            category, products = fetch_category_products(category)
+            category_products[category] = products
 
         # Gather all products
         all_products = []
@@ -709,9 +705,9 @@ def process_recommendation_request(request_data):
         # Check if we have any real scraped products
         valid_products = [p for p in all_products if p and p.get("title") and p.get("url")]
         
-        # Limit products for faster AI processing (top 8 products)
-        if len(valid_products) > 8:
-            valid_products = valid_products[:8]
+        # Limit products for faster AI processing (top 6 products - reduced from 8)
+        if len(valid_products) > 6:
+            valid_products = valid_products[:6]
         
         # Get currency symbol (moved here to fix scope issue)
         currency_symbol = get_currency_symbol(user_data.get("user_location", ""))

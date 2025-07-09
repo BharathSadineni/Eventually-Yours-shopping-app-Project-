@@ -8,10 +8,13 @@ import re
 
 
 def amazon_category_top_products(
-    category, amazon_domain, num_results=10, budget_range=None, preferred_brands=None
+    category, amazon_domain, num_results=4, budget_range=None, preferred_brands=None
 ):
     """
-    Fast single-request Amazon scraper with enhanced anti-detection
+    Ultra-fast Amazon scraper optimized for speed with better anti-detection
+    - Single request strategy
+    - Minimal delays
+    - Better anti-detection to reduce 503 errors
     """
     user_agents = [
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -60,7 +63,7 @@ def amazon_category_top_products(
     if low_price and high_price:
         price_filter = f"&low-price={low_price}&high-price={high_price}"
 
-    # Try different search strategies with better anti-detection
+    # Try different search strategies to avoid 503 errors
     search_strategies = [
         f"https://www.{domain}/s?k={quote_plus(search_query)}&s=review-rank{price_filter}",
         f"https://www.{domain}/s?k={quote_plus(search_query)}&s=best-sellers{price_filter}",
@@ -96,27 +99,31 @@ def amazon_category_top_products(
                     "Referer": f"https://www.{domain}/"
                 })
             
-            # Random delay to avoid detection
-            time.sleep(random.uniform(1, 2))
+            # Adaptive delay based on strategy
+            if strategy_idx == 0:
+                time.sleep(random.uniform(0.2, 0.5))  # Shorter for first strategy
+            else:
+                time.sleep(random.uniform(0.5, 1.0))  # Longer for retries
             
-            response = session.get(search_url, timeout=10)
+            # Fast timeout
+            response = session.get(search_url, timeout=6)
             response.raise_for_status()
             soup = BeautifulSoup(response.text, "html.parser")
 
-            # Enhanced bot detection check
+            # Quick bot detection check
             page_text = soup.get_text().lower()
             if any(term in page_text for term in ["robot", "captcha", "blocked", "unusual", "verify"]):
                 print(f"Bot detection detected for {category}")
-                time.sleep(random.uniform(2, 4))  # Wait longer before next strategy
-                continue  # Try next strategy
+                time.sleep(random.uniform(1, 2))  # Wait longer on detection
+                continue
 
-            # Extract all product data from search results in one go
+            # Extract product data efficiently
             products = []
             
-            # Find all product containers
-            product_containers = soup.select("[data-component-type='s-search-result']")
+            # Find all product containers - limit to first 12 for better variety
+            product_containers = soup.select("[data-component-type='s-search-result']")[:12]
             
-            for container in product_containers[:num_results * 2]:  # Get more to filter
+            for container in product_containers:
                 try:
                     # Extract product URL
                     link_elem = container.select_one("a.a-link-normal.s-no-outline")
@@ -149,7 +156,7 @@ def amazon_category_top_products(
                     price_text = price_elem.get_text(strip=True) if price_elem else None
                     price_value = parse_price_to_float(price_text)
                     
-                    # Extract rating
+                    # Extract rating (simplified)
                     rating_elem = container.select_one("span.a-icon-alt")
                     rating = None
                     if rating_elem:
@@ -177,6 +184,10 @@ def amazon_category_top_products(
                         }
                         products.append(product_data)
                         
+                        # Stop if we have enough products
+                        if len(products) >= num_results:
+                            break
+                        
                 except Exception as e:
                     print(f"Error extracting product data: {e}")
                     continue
@@ -191,125 +202,117 @@ def amazon_category_top_products(
         except requests.exceptions.HTTPError as e:
             if e.response.status_code == 503:
                 print(f"503 Server Error for {category} (strategy {strategy_idx + 1})")
-                time.sleep(random.uniform(3, 6))  # Wait longer for 503 errors
-                continue  # Try next strategy
+                time.sleep(random.uniform(2, 4))  # Wait longer for 503 errors
+                continue
             else:
                 print(f"HTTP Error {e.response.status_code} for {category}: {e}")
                 continue
+        except requests.exceptions.Timeout:
+            print(f"Timeout for {category} (strategy {strategy_idx + 1})")
+            continue
         except Exception as e:
             print(f"Amazon category scraping error: {e}")
             continue
-    
+
     print(f"No products found for {category} with any strategy")
     return []
 
 
 def parse_price_to_float(price_str):
+    """Parse price string to float value"""
     if not price_str:
         return None
-    # Remove currency symbols and commas, extract numeric part
-    match = re.search(r"[\d,.]+", price_str)
-    if not match:
-        return None
-    num_str = match.group(0).replace(",", "").replace(".", "")
-    # Handle decimal point by checking last two digits
-    if len(num_str) > 2:
-        num = float(num_str[:-2] + "." + num_str[-2:])
-    else:
-        num = float(num_str)
-    return num
+    
+    try:
+        # Remove currency symbols and commas
+        cleaned_price = re.sub(r'[£$€,]', '', price_str.strip())
+        # Extract the first number (before any additional text)
+        price_match = re.search(r'(\d+\.?\d*)', cleaned_price)
+        if price_match:
+            return float(price_match.group(1))
+    except (ValueError, AttributeError):
+        pass
+    
+    return None
 
 
 def scrape_amazon_product(url):
-    """
-    Individual product scraper (fallback for when search scraping doesn't work)
-    """
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Accept-Encoding": "gzip, deflate, br",
-        "Connection": "keep-alive",
-    }
-    
+    """Scrape detailed product information from Amazon product page"""
     try:
-        # Very minimal delay
-        time.sleep(random.uniform(0.1, 0.3))
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Accept-Encoding": "gzip, deflate, br",
+            "DNT": "1",
+            "Connection": "keep-alive",
+            "Upgrade-Insecure-Requests": "1",
+        }
         
-        response = httpx.get(url, headers=headers, timeout=6)
+        response = requests.get(url, headers=headers, timeout=10)
         response.raise_for_status()
+        soup = BeautifulSoup(response.text, "html.parser")
+        
+        # Extract product details
+        title_elem = soup.select_one("#productTitle")
+        title = title_elem.get_text(strip=True) if title_elem else None
+        
+        price_elem = soup.select_one("#priceblock_ourprice, .a-price .a-offscreen")
+        price_text = price_elem.get_text(strip=True) if price_elem else None
+        price_value = parse_price_to_float(price_text)
+        
+        rating_elem = soup.select_one("#acrPopover")
+        rating = None
+        if rating_elem:
+            rating_text = rating_elem.get("title", "")
+            rating_match = re.search(r'(\d+\.?\d*)', rating_text)
+            if rating_match:
+                try:
+                    rating = float(rating_match.group(1))
+                except ValueError:
+                    pass
+        
+        image_elem = soup.select_one("#landingImage, #imgBlkFront")
+        image_url = image_elem.get("src") if image_elem and image_elem.has_attr("src") else None
+        
+        return {
+            "url": url,
+            "title": title,
+            "image_url": image_url,
+            "price": price_text,
+            "price_value": price_value,
+            "average_rating": rating,
+        }
+        
     except Exception as e:
-        print(f"Error fetching URL {url}: {e}")
+        print(f"Error scraping product {url}: {e}")
         return None
-
-    soup = BeautifulSoup(response.text, "html.parser")
-
-    title = soup.find(id="productTitle")
-    title = title.get_text(strip=True) if title else None
-
-    image = soup.select_one("#imgTagWrapperId img")
-    image_url = image["src"] if image and image.has_attr("src") else None
-
-    price = soup.select_one(".a-price .a-offscreen")
-    if not price:
-        # Try alternative price selectors
-        price = soup.select_one("#priceblock_ourprice") or soup.select_one(
-            "#priceblock_dealprice"
-        )
-    price_text = price.get_text(strip=True) if price else None
-    price_value = parse_price_to_float(price_text)
-
-    rating_tag = soup.select_one("span.a-icon-alt")
-    rating = None
-    if rating_tag:
-        rating_text = rating_tag.get_text(strip=True)
-        rating_match = re.search(r'(\d+\.?\d*)', rating_text)
-        if rating_match:
-            try:
-                rating = float(rating_match.group(1))
-            except ValueError:
-                pass
-
-    return {
-        "url": url,
-        "title": title,
-        "image_url": image_url,
-        "price": price_text,
-        "price_value": price_value,
-        "average_rating": rating,
-    }
 
 
 def test_amazon_scraper():
-    """Test function to check if Amazon scraper is working"""
+    """Test the Amazon scraper with a simple category"""
     print("Testing Amazon scraper...")
     
     # Test with a simple category
-    test_category = "laptop"
-    test_domain = "www.amazon.co.uk"
+    test_category = "headphones"
+    test_domain = "amazon.com"
     
-    print(f"Testing category: {test_category} on {test_domain}")
+    products = amazon_category_top_products(
+        test_category,
+        test_domain,
+        num_results=3,
+        budget_range="20-100"
+    )
     
-    # Try to get products directly
-    products = amazon_category_top_products(test_category, test_domain, num_results=2)
-    
-    if not products:
-        print("❌ Failed to get products - Amazon scraper is not working")
-        return False
-    
-    print(f"✅ Got {len(products)} products")
-    
-    # Show first product details
     if products:
-        product = products[0]
-        print(f"✅ Successfully scraped product: {product.get('title', 'Unknown')}")
-        print(f"  Price: {product.get('price', 'N/A')}")
-        print(f"  Rating: {product.get('average_rating', 'N/A')}")
-        return True
+        print(f"✅ Successfully found {len(products)} products")
+        for i, product in enumerate(products, 1):
+            print(f"{i}. {product.get('title', 'No title')} - {product.get('price', 'No price')}")
+    else:
+        print("❌ No products found")
     
-    return False
+    return products
 
 
 if __name__ == "__main__":
-    # Test the scraper
     test_amazon_scraper()

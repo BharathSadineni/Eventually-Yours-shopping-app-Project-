@@ -465,6 +465,10 @@ def process_recommendation_request(request_data):
     session_id = request_data.get("session_id")
     shopping_input = request_data.get("shopping_input", {})
     
+    # Detect environment
+    ENV = os.getenv("ENV", "development").lower()
+    IS_PRODUCTION = ENV == "production"
+
     try:
         print(f"Processing recommendation request for session: {session_id}")
         
@@ -692,10 +696,20 @@ def process_recommendation_request(request_data):
             # Return only the product objects (without scores)
             return category, [product for product, score in scored_products]
 
-        # Process categories sequentially to avoid rate limiting
-        for category in categories:
+        # --- PRODUCTION-ONLY LIMIT AND DELAY ---
+        if IS_PRODUCTION:
+            max_categories = 2  # Limit to 2 categories in production
+            categories_to_process = categories[:max_categories]
+        else:
+            categories_to_process = categories
+
+        for idx, category in enumerate(categories_to_process):
             category, products = fetch_category_products(category)
             category_products[category] = products
+            # Add delay between category scrapes in production
+            if IS_PRODUCTION and idx < len(categories_to_process) - 1:
+                import time
+                time.sleep(random.uniform(2, 3))  # 2-3 seconds delay
 
         # Gather all products
         all_products = []

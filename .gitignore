@@ -95,5 +95,13 @@ frontend/build/
 *.tmp
 *.temp
 
+# Test files
+backend/test.py
+backend/test_local.py
+backend/test_workflow.py
+backend/test_deployed_backend.py
+backend/run_test.py
+backend/TEST_README.md
+
 # Allow queryClient.ts to be tracked even if lib/ is ignored somewhere
 !frontend/src/lib/queryClient.ts

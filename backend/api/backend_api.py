@@ -630,7 +630,7 @@ def process_recommendation_request(request_data):
             scraped_products = amazon_category_top_products(
                 category,
                 amazon_domain,
-                num_results=random.randint(3, 6),  # Variable number for better variety
+                num_results=random.randint(2, 3),  # Reduced to 2-3 products per category
                 budget_range=user_data.get("budget_range"),
                 preferred_brands=preferred_brands,  # Pass preferred brands to scraper
             )

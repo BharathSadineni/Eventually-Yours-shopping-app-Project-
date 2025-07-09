@@ -65,8 +65,8 @@ def amazon_category_top_products(
 
     # Try different search strategies to avoid 503 errors
     search_strategies = [
-        f"https://www.{domain}/s?k={quote_plus(search_query)}&s=review-rank{price_filter}",
         f"https://www.{domain}/s?k={quote_plus(search_query)}&s=best-sellers{price_filter}",
+        f"https://www.{domain}/s?k={quote_plus(search_query)}&s=review-rank{price_filter}",
         f"https://www.{domain}/s?k={quote_plus(search_query)}{price_filter}",
     ]
 

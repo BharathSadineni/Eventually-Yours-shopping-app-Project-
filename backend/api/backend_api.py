@@ -698,7 +698,7 @@ def process_recommendation_request(request_data):
 
         # --- PRODUCTION-ONLY LIMIT AND DELAY ---
         if IS_PRODUCTION:
-            max_categories = 2  # Limit to 2 categories in production
+            max_categories = 5  # Limit to 5 categories in production
             categories_to_process = categories[:max_categories]
         else:
             categories_to_process = categories

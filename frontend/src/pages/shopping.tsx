@@ -19,8 +19,7 @@ import {
   ArrowLeft, 
   Sparkles,
   Star,
-  Calendar,
-  Award
+  Calendar
 } from "lucide-react";
 import { z } from "zod";
 
@@ -75,7 +74,6 @@ const occasions = [
 
 const formSchema = insertShoppingQuerySchema.extend({
   occasion: z.string().min(1, "Occasion is required"),
-  brands: z.string().optional(),
   query: z.string().min(10, "Please describe what you're looking for (minimum 10 characters)"),
 });
 
@@ -118,7 +116,6 @@ export default function Shopping() {
     defaultValues: {
       query: "",
       occasion: "",
-      brands: "",
     },
   });
 
@@ -138,7 +135,6 @@ export default function Shopping() {
 
       const shoppingInput = {
         occasion: shoppingData.occasion,
-        brandsPreferred: shoppingData.brands,
         shoppingInput: shoppingData.query,
       };
       const combinedData = {
@@ -291,30 +287,7 @@ export default function Shopping() {
                     )}
                   />
 
-                  <FormField
-                    control={form.control}
-                    name="brands"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="flex items-center text-sm font-semibold text-gray-700 dark:text-gray-300">
-                          <Award className="text-primary mr-2 h-4 w-4" />
-                          Brands Preferred
-                        </FormLabel>
-                        <FormControl>
-                          <Input
-                            {...field}
-                            placeholder="e.g., Nike, Apple, Samsung (separate with commas)"
-                            className="form-field"
-                            autoComplete="off"
-                          />
-                        </FormControl>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                          Enter your preferred brands separated by commas. They will be prioritized in your recommendations.
-                        </p>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+
                 </div>
 
                 <FormField

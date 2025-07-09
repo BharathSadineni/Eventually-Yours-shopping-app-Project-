@@ -99,13 +99,26 @@ const countries = [
 
 const formSchema = insertUserProfileSchema.extend({
   categories: z.array(z.string()).min(1, "Please select at least one category"),
-  age: z.number().min(1, "Age is required").max(120, "Please enter a valid age"),
+  age: z.string().min(1, "Age is required").refine((val) => {
+    const num = parseInt(val);
+    return !isNaN(num) && num >= 13 && num <= 120;
+  }, "Please enter a valid age between 13 and 120"),
   gender: z.string().min(1, "Gender is required"),
   location: z.string().min(1, "Location is required"),
-  budgetMin: z.number().min(0, "Minimum budget must be 0 or greater"),
-  budgetMax: z.number().min(1, "Maximum budget must be greater than 0"),
+  budgetMin: z.string().min(1, "Minimum budget is required").refine((val) => {
+    const num = parseInt(val);
+    return !isNaN(num) && num >= 0;
+  }, "Please enter a valid minimum budget"),
+  budgetMax: z.string().min(1, "Maximum budget is required").refine((val) => {
+    const num = parseInt(val);
+    return !isNaN(num) && num > 0;
+  }, "Please enter a valid maximum budget"),
   interests: z.string().min(10, "Please describe your interests (minimum 10 characters)"),
-}).refine((data) => data.budgetMax > data.budgetMin, {
+}).refine((data) => {
+  const min = parseInt(data.budgetMin);
+  const max = parseInt(data.budgetMax);
+  return !isNaN(min) && !isNaN(max) && max > min;
+}, {
   message: "Maximum budget must be greater than minimum budget",
   path: ["budgetMax"],
 });
@@ -113,12 +126,13 @@ const formSchema = insertUserProfileSchema.extend({
 type FormData = z.infer<typeof formSchema>;
 
 type CustomNumberInputProps = {
-  value: number;
-  setValue: (v: number) => void;
+  value: string;
+  setValue: (v: string) => void;
   min?: number;
   max?: number;
   step?: number;
   className?: string;
+  placeholder?: string;
   [key: string]: any;
 };
 
@@ -129,13 +143,38 @@ function CustomNumberInput({
   max = 9999,
   step = 1,
   className = "",
+  placeholder = "",
   ...props
 }: CustomNumberInputProps) {
+  const handleIncrement = () => {
+    const currentValue = parseInt(value) || 0;
+    const newValue = Math.min(max, currentValue + step);
+    setValue(newValue.toString());
+  };
+
+  const handleDecrement = () => {
+    const currentValue = parseInt(value) || 0;
+    const newValue = Math.max(min, currentValue - step);
+    setValue(newValue.toString());
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value.replace(/[^0-9]/g, '');
+    if (val === '') {
+      setValue('');
+    } else {
+      const numValue = parseInt(val);
+      if (!isNaN(numValue)) {
+        setValue(numValue.toString());
+      }
+    }
+  };
+
   return (
     <div className={`flex items-center h-12 w-full bg-transparent border border-gray-300 dark:border-gray-700 rounded-lg overflow-hidden focus-within:border-yellow-400 ${className}`} {...props}>
       <button
         type="button"
-        onClick={() => setValue(Math.max(min, (value || 0) - step))}
+        onClick={handleDecrement}
         className="w-10 h-12 text-yellow-400 hover:bg-yellow-400/10 transition-colors text-xl font-bold flex items-center justify-center focus:outline-none border-r border-gray-300 dark:border-gray-700"
         tabIndex={-1}
       >
@@ -145,18 +184,15 @@ function CustomNumberInput({
         type="text"
         inputMode="numeric"
         pattern="[0-9]*"
-        name=""
+        placeholder={placeholder}
         style={{ appearance: 'textfield', MozAppearance: 'textfield', WebkitAppearance: 'none' }}
         className="form-field no-spinner w-full text-center bg-transparent border-none outline-none text-lg font-semibold text-gray-900 dark:text-white focus:ring-0"
         value={value || ""}
-        onChange={e => {
-          const val = e.target.value.replace(/[^0-9]/g, '');
-          setValue(Math.max(min, Math.min(max, val ? parseInt(val) : 0)));
-        }}
+        onChange={handleInputChange}
       />
       <button
         type="button"
-        onClick={() => setValue(Math.min(max, (value || 0) + step))}
+        onClick={handleIncrement}
         className="w-10 h-12 text-yellow-400 hover:bg-yellow-400/10 transition-colors text-xl font-bold flex items-center justify-center focus:outline-none border-l border-gray-300 dark:border-gray-700"
         tabIndex={-1}
       >
@@ -177,6 +213,13 @@ export default function UserInfo() {
   const [showExportPopup, setShowExportPopup] = useState(false);
   const [showExportAfterSubmit, setShowExportAfterSubmit] = useState(false);
 
+  // Refs for scrolling to error sections
+  const ageRef = useRef<HTMLDivElement>(null);
+  const genderRef = useRef<HTMLDivElement>(null);
+  const locationRef = useRef<HTMLDivElement>(null);
+  const budgetRef = useRef<HTMLDivElement>(null);
+  const interestsRef = useRef<HTMLDivElement>(null);
+
   // Initialize selectedCountry from userInfo.location if available
   React.useEffect(() => {
     if (userInfo.location) {
@@ -187,11 +230,11 @@ export default function UserInfo() {
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      age: undefined,
+      age: "",
       gender: "",
       location: "",
-      budgetMin: 0,
-      budgetMax: 100,
+      budgetMin: "",
+      budgetMax: "",
       categories: [],
       interests: "",
     },
@@ -219,6 +262,37 @@ export default function UserInfo() {
       }, 100);
     }
   }, [form.formState.errors.categories]);
+
+  // Watch for all form errors and scroll to first error
+  React.useEffect(() => {
+    const errors = form.formState.errors;
+    if (Object.keys(errors).length > 0) {
+      setTimeout(() => {
+        scrollToFirstError();
+      }, 100);
+    }
+  }, [form.formState.errors]);
+
+  // Function to scroll to the first error field
+  const scrollToFirstError = () => {
+    const errors = form.formState.errors;
+    
+    if (errors.age && ageRef.current) {
+      ageRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+    } else if (errors.gender && genderRef.current) {
+      genderRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+    } else if (errors.location && locationRef.current) {
+      locationRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+    } else if (errors.budgetMin && budgetRef.current) {
+      budgetRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+    } else if (errors.budgetMax && budgetRef.current) {
+      budgetRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+    } else if (errors.interests && interestsRef.current) {
+      interestsRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+    } else if (errors.categories && categoriesRef.current) {
+      categoriesRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  };
 
   // On import, always navigate to shopping
   const handleImportData = () => {
@@ -353,6 +427,9 @@ const handleCategoryChange = (categoryId: string, checked: boolean) => {
   const onSubmit = async (data: FormData) => {
     console.log("onSubmit function called!");
     
+    // Trigger validation for all fields
+    const isValid = await form.trigger();
+    
     // Get latest categories and interests from form state to ensure they are up to date
     const latestCategories = form.getValues("categories") || selectedCategories;
     const latestInterests = form.getValues("interests") || data.interests;
@@ -360,16 +437,31 @@ const handleCategoryChange = (categoryId: string, checked: boolean) => {
     // Validate categories
     if (!latestCategories || latestCategories.length === 0) {
       setCategoriesError("Please select at least one category");
-      if (categoriesRef.current) {
-        categoriesRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
-      }
+      setTimeout(() => {
+        if (categoriesRef.current) {
+          categoriesRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+      }, 100);
       return;
     } else {
       setCategoriesError("");
     }
 
+    // Check form validation and scroll to first error
+    const formErrors = form.formState.errors;
+    if (Object.keys(formErrors).length > 0 || !isValid) {
+      setTimeout(() => {
+        scrollToFirstError();
+      }, 100);
+      return;
+    }
+
+    // Convert string values to numbers for backend compatibility
     const submissionData = {
       ...data,
+      age: parseInt(data.age) || 0,
+      budgetMin: parseInt(data.budgetMin) || 0,
+      budgetMax: parseInt(data.budgetMax) || 0,
       categories: latestCategories,
       interests: latestInterests,
     };
@@ -449,32 +541,32 @@ const handleCategoryChange = (categoryId: string, checked: boolean) => {
                     control={form.control}
                     name="age"
                     render={({ field }) => (
-                      <FormItem>
+                      <FormItem ref={ageRef}>
                         <FormLabel className="flex items-center text-sm font-semibold text-gray-700 dark:text-gray-300">
                           <Cake className="text-primary mr-2 h-4 w-4" />
                           Age *
                         </FormLabel>
                         <FormControl>
                           <CustomNumberInput
-                            value={field.value || 0}
+                            value={field.value}
                             setValue={field.onChange}
-                            min={1}
+                            min={13}
                             max={120}
                             step={1}
+                            placeholder="Enter your age"
+                            className="form-field"
                           />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
-                </div>
 
-                <div className="grid md:grid-cols-2 gap-6">
                   <FormField
                     control={form.control}
                     name="gender"
                     render={({ field }) => (
-                      <FormItem>
+                      <FormItem ref={genderRef}>
                         <FormLabel className="flex items-center text-sm font-semibold text-gray-700 dark:text-gray-300">
                           <Users className="text-primary mr-2 h-4 w-4" />
                           Gender *
@@ -496,12 +588,14 @@ const handleCategoryChange = (categoryId: string, checked: boolean) => {
                       </FormItem>
                     )}
                   />
+                </div>
 
+                <div className="grid md:grid-cols-2 gap-6">
                   <FormField
                     control={form.control}
                     name="location"
                     render={({ field }) => (
-                      <FormItem>
+                      <FormItem ref={locationRef}>
                         <FormLabel className="flex items-center text-sm font-semibold text-gray-700 dark:text-gray-300">
                           <MapPin className="text-primary mr-2 h-4 w-4" />
                           Location *
@@ -530,7 +624,7 @@ const handleCategoryChange = (categoryId: string, checked: boolean) => {
                 </div>
 
                 {/* Shopping Preferences */}
-                <div className="border-t border-gray-200 dark:border-gray-700 pt-8">
+                <div ref={budgetRef} className="border-t border-gray-200 dark:border-gray-700 pt-8">
                   <h2 className="text-xl font-semibold text-gray-900 dark:text-foreground mb-6 flex items-center">
                     <DollarSign className="text-primary mr-3 h-5 w-5" />
                     Budget Range ({countries.find(c => c.name === selectedCountry)?.currency || "$"}) *
@@ -545,11 +639,13 @@ const handleCategoryChange = (categoryId: string, checked: boolean) => {
                           <FormLabel className="text-sm font-semibold text-gray-700 dark:text-gray-300">Min</FormLabel>
                           <FormControl>
                             <CustomNumberInput
-                              value={field.value || 0}
+                              value={field.value}
                               setValue={field.onChange}
                               min={0}
-                              max={field.value >= form.getValues('budgetMax') ? field.value : form.getValues('budgetMax')}
+                              max={9999}
                               step={1}
+                              placeholder="Minimum budget"
+                              className="form-field"
                             />
                           </FormControl>
                           <FormMessage />
@@ -565,11 +661,13 @@ const handleCategoryChange = (categoryId: string, checked: boolean) => {
                           <FormLabel className="text-sm font-semibold text-gray-700 dark:text-gray-300">Max</FormLabel>
                           <FormControl>
                             <CustomNumberInput
-                              value={field.value || 0}
+                              value={field.value}
                               setValue={field.onChange}
-                              min={form.getValues('budgetMin')}
-                              max={99999}
+                              min={1}
+                              max={9999}
                               step={1}
+                              placeholder="Maximum budget"
+                              className="form-field"
                             />
                           </FormControl>
                           <FormMessage />
@@ -613,7 +711,7 @@ const handleCategoryChange = (categoryId: string, checked: boolean) => {
                 </div>
 
                 {/* Interests */}
-                <div className="border-t border-gray-200 dark:border-gray-700 pt-8">
+                <div ref={interestsRef} className="border-t border-gray-200 dark:border-gray-700 pt-8">
                   <FormField
                     control={form.control}
                     name="interests"

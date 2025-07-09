@@ -621,87 +621,78 @@ def process_recommendation_request(request_data):
             # Extract preferred brands from shopping input
             preferred_brands = shopping_input.get('brandsPreferred', '')
             
-            urls = amazon_category_top_products(
+            # Get products directly from search results (much faster)
+            scraped_products = amazon_category_top_products(
                 category,
                 amazon_domain,
-                num_results=1,  # Reduced to 1 for faster processing
+                num_results=3,  # Get 3 products per category for better selection
                 budget_range=user_data.get("budget_range"),
                 preferred_brands=preferred_brands,  # Pass preferred brands to scraper
             )
-            products = []
-            if not urls:
-                return category, products
+            
+            if not scraped_products:
+                return category, []
 
-            # Increased max_workers for faster concurrent scraping
-            with ThreadPoolExecutor(max_workers=8) as executor:  # Increased from 5 to 8
-                futures = {
-                    executor.submit(scrape_amazon_product, url): url for url in urls
-                }
-                for future in as_completed(futures):
-                    url = futures[future]
+            # Process and score the scraped products
+            scored_products = []
+            
+            for product in scraped_products:
+                if not product or not product.get('title'):
+                    continue
+                    
+                # Enhanced brand filtering and scoring
+                product_score = 0
+                
+                # Check if product title contains preferred brands
+                if preferred_brands and preferred_brands.strip():
+                    brands = [brand.strip().lower() for brand in preferred_brands.split(',') if brand.strip()]
+                    product_title = product.get('title', '').lower()
+                    
+                    # Check brand matches in title
+                    for brand in brands:
+                        # Brand in title gets good score
+                        if brand in product_title:
+                            product_score += 10  # High score for brand match in title
+                            break
+                        # Partial brand match gets lower score
+                        elif any(brand_word in product_title for brand_word in brand.split()):
+                            product_score += 5  # Medium score for partial brand match
+                            break
+                
+                # Filter products by budget range if price_value is available
+                budget_range = user_data.get("budget_range")
+                if budget_range and product.get("price_value") is not None:
                     try:
-                        product = future.result()
-                        if product:
-                            # Enhanced brand filtering and scoring
-                            product_score = 0
-                            
-                            # Check if product title contains preferred brands
-                            if preferred_brands and preferred_brands.strip():
-                                brands = [brand.strip().lower() for brand in preferred_brands.split(',') if brand.strip()]
-                                product_title = product.get('title', '').lower()
-                                detected_brand = product.get('detected_brand', '').lower()
-                                
-                                # Check both title and detected brand
-                                for brand in brands:
-                                    # Exact brand match gets highest score
-                                    if brand == detected_brand:
-                                        product_score += 15  # Highest score for exact brand match
-                                        break
-                                    # Brand in title gets good score
-                                    elif brand in product_title:
-                                        product_score += 10  # High score for brand match in title
-                                        break
-                                    # Partial brand match gets lower score
-                                    elif any(brand_word in product_title for brand_word in brand.split()):
-                                        product_score += 5  # Medium score for partial brand match
-                                        break
-                            
-                            # Filter products by budget range if price_value is available
-                            budget_range = user_data.get("budget_range")
-                            if budget_range and product.get("price_value") is not None:
-                                try:
-                                    low, high = (
-                                        budget_range.replace("€", "")
-                                        .replace("$", "")
-                                        .replace("£", "")
-                                        .split("-")
-                                    )
-                                    low = float(low.strip())
-                                    high = float(high.strip())
-                                    if low <= product["price_value"] <= high:
-                                        # Add budget score (closer to middle of range gets higher score)
-                                        budget_mid = (low + high) / 2
-                                        price_diff = abs(product["price_value"] - budget_mid)
-                                        budget_score = max(0, 5 - (price_diff / budget_mid) * 5)
-                                        product_score += budget_score
-                                        products.append((product, product_score))
-                                except:
-                                    # If budget parsing fails, include product anyway
-                                    products.append((product, product_score))
-                            else:
-                                # If no price or budget, include product
-                                products.append((product, product_score))
-                    except Exception as e:
-                        print(f"Exception occurred while scraping URL {url}: {e}")
+                        low, high = (
+                            budget_range.replace("€", "")
+                            .replace("$", "")
+                            .replace("£", "")
+                            .split("-")
+                        )
+                        low = float(low.strip())
+                        high = float(high.strip())
+                        if low <= product["price_value"] <= high:
+                            # Add budget score (closer to middle of range gets higher score)
+                            budget_mid = (low + high) / 2
+                            price_diff = abs(product["price_value"] - budget_mid)
+                            budget_score = max(0, 5 - (price_diff / budget_mid) * 5)
+                            product_score += budget_score
+                            scored_products.append((product, product_score))
+                    except:
+                        # If budget parsing fails, include product anyway
+                        scored_products.append((product, product_score))
+                else:
+                    # If no price or budget, include product
+                    scored_products.append((product, product_score))
 
             # Sort products by score (brand matches first, then by budget fit)
-            products.sort(key=lambda x: x[1], reverse=True)
+            scored_products.sort(key=lambda x: x[1], reverse=True)
             
             # Return only the product objects (without scores)
-            return category, [product for product, score in products]
+            return category, [product for product, score in scored_products]
 
-        # Scrape products for each category with increased concurrency
-        with ThreadPoolExecutor(max_workers=3) as category_executor:  # Keep at 3 for category processing
+        # Reduced concurrency to avoid rate limiting
+        with ThreadPoolExecutor(max_workers=2) as category_executor:  # Reduced from 3 to 2
             category_futures = [
                 category_executor.submit(fetch_category_products, category)
                 for category in categories

@@ -5,8 +5,6 @@ from bs4 import BeautifulSoup
 from urllib.parse import quote_plus
 import requests
 import re
-from concurrent.futures import ThreadPoolExecutor, as_completed
-import threading
 
 
 def amazon_category_top_products(
@@ -146,105 +144,55 @@ def parse_price_to_float(price_str):
 
 def scrape_amazon_product(url):
     """
-    Scrape individual Amazon product page with enhanced error handling and brand detection
+    Scrape individual Amazon product page with simplified approach
     """
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36",
+        "Accept-Language": "en-US,en;q=0.9",
+    }
     try:
-        print(f"Scraping product: {url}")
-        
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36",
-            "Accept-Language": "en-US,en;q=0.9",
-        }
-        
-        # Add retry logic for product scraping
-        max_retries = 2
-        for attempt in range(max_retries):
-            try:
-                response = httpx.get(url, headers=headers, timeout=10)
-                response.raise_for_status()
-                break
-            except Exception as e:
-                print(f"Error fetching URL {url} (attempt {attempt + 1}): {e}")
-                if attempt < max_retries - 1:
-                    time.sleep(random.uniform(1, 2))
-                    continue
-                else:
-                    return None
-
-        soup = BeautifulSoup(response.text, "html.parser")
-
-        # Check if we got blocked or got an error page
-        if "robot" in soup.get_text().lower() or "captcha" in soup.get_text().lower():
-            print(f"Bot detection detected for product: {url}")
-            return None
-
-        title = soup.find(id="productTitle")
-        title = title.get_text(strip=True) if title else None
-
-        # Quick brand extraction from title
-        detected_brand = None
-        if title:
-            # Simple brand detection: first capitalized word(s) at start
-            brand_match = re.match(r'^([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)', title)
-            if brand_match:
-                detected_brand = brand_match.group(1).strip()
-                # Filter out common non-brand words
-                if detected_brand.lower() in ['the', 'new', 'best', 'top', 'premium', 'quality']:
-                    detected_brand = None
-
-        image = soup.select_one("#imgTagWrapperId img")
-        image_url = image["src"] if image and image.has_attr("src") else None
-
-        price = soup.select_one(".a-price .a-offscreen")
-        if not price:
-            # Try alternative price selectors
-            price = soup.select_one("#priceblock_ourprice") or soup.select_one(
-                "#priceblock_dealprice"
-            )
-        price_text = price.get_text(strip=True) if price else None
-        price_value = parse_price_to_float(price_text)
-
-        rating_tag = soup.select_one("span.a-icon-alt")
-        rating = None
-        if rating_tag:
-            rating_text = rating_tag.get_text(strip=True)
-            rating_match = re.search(r'(\d+\.?\d*)', rating_text)
-            if rating_match:
-                try:
-                    rating = float(rating_match.group(1))
-                except ValueError:
-                    pass
-
-        product_data = {
-            "url": url,
-            "title": title,
-            "image_url": image_url,
-            "price": price_text,
-            "price_value": price_value,
-            "average_rating": rating,
-        }
-        
-        # Add detected brand if found
-        if detected_brand:
-            product_data["detected_brand"] = detected_brand
-
-        # Validate that we have at least a title
-        if not product_data.get('title'):
-            print(f"No title found for product: {url}")
-            return None
-
-        print(f"Successfully scraped product: {product_data.get('title', 'Unknown')}")
-        if detected_brand:
-            print(f"Detected brand: {detected_brand}")
-
-        # Minimal delay to avoid rate limiting
-        time.sleep(random.uniform(0.1, 0.3))
-
-        return product_data
-
+        response = httpx.get(url, headers=headers, timeout=10)
+        response.raise_for_status()
     except Exception as e:
-        print(f"Error scraping product {url}: {e}")
+        print(f"Error fetching URL {url}: {e}")
         return None
+
+    soup = BeautifulSoup(response.text, "html.parser")
+
+    title = soup.find(id="productTitle")
+    title = title.get_text(strip=True) if title else None
+
+    image = soup.select_one("#imgTagWrapperId img")
+    image_url = image["src"] if image and image.has_attr("src") else None
+
+    price = soup.select_one(".a-price .a-offscreen")
+    if not price:
+        # Try alternative price selectors
+        price = soup.select_one("#priceblock_ourprice") or soup.select_one(
+            "#priceblock_dealprice"
+        )
+    price_text = price.get_text(strip=True) if price else None
+    price_value = parse_price_to_float(price_text)
+
+    rating_tag = soup.select_one("span.a-icon-alt")
+    rating = None
+    if rating_tag:
+        rating_text = rating_tag.get_text(strip=True)
+        rating_match = re.search(r'(\d+\.?\d*)', rating_text)
+        if rating_match:
+            try:
+                rating = float(rating_match.group(1))
+            except ValueError:
+                pass
+
+    return {
+        "url": url,
+        "title": title,
+        "image_url": image_url,
+        "price": price_text,
+        "price_value": price_value,
+        "average_rating": rating,
+    }
 
 
 def test_amazon_scraper():

@@ -145,6 +145,7 @@ function CustomNumberInput({
         type="text"
         inputMode="numeric"
         pattern="[0-9]*"
+        name=""
         style={{ appearance: 'textfield', MozAppearance: 'textfield', WebkitAppearance: 'none' }}
         className="form-field no-spinner w-full text-center bg-transparent border-none outline-none text-lg font-semibold text-gray-900 dark:text-white focus:ring-0"
         value={value || ""}
@@ -350,6 +351,8 @@ const handleCategoryChange = (categoryId: string, checked: boolean) => {
 
   // On manual submit, show export pop-up
   const onSubmit = async (data: FormData) => {
+    console.log("onSubmit function called!");
+    
     // Get latest categories and interests from form state to ensure they are up to date
     const latestCategories = form.getValues("categories") || selectedCategories;
     const latestInterests = form.getValues("interests") || data.interests;
@@ -371,17 +374,32 @@ const handleCategoryChange = (categoryId: string, checked: boolean) => {
       interests: latestInterests,
     };
 
+    console.log("Submitting user data:", submissionData);
+
     try {
       const currentSessionId = sessionId || createSessionId();
-      const response = await apiRequest("POST", "/api/user-info", {
+      console.log("Using session ID:", currentSessionId);
+      
+      const requestData = {
         ...submissionData,
         session_id: currentSessionId,
-      }, {
+      };
+      
+      console.log("Request data being sent:", requestData);
+      console.log("Request headers:", {
+        "Content-Type": "application/json",
+        "X-Session-Id": currentSessionId,
+      });
+      
+      const response = await apiRequest("POST", "/api/user-info", requestData, {
         headers: {
           "X-Session-Id": currentSessionId,
         },
       });
+      
+      console.log("Response status:", response.status);
       const result = await response.json();
+      console.log("Response data:", result);
 
       if (result.status === "success" && result.session_id) {
         setUserInfo(submissionData);
@@ -404,6 +422,7 @@ const handleCategoryChange = (categoryId: string, checked: boolean) => {
         setShowExportPopup(true);
       }
     } catch (error) {
+      console.error("Error submitting user data:", error);
       toast({
         title: "Error",
         description: "Failed to save user info",
@@ -606,7 +625,10 @@ const handleCategoryChange = (categoryId: string, checked: boolean) => {
                         </FormLabel>
                         <FormControl>
                           <Textarea
-                            {...field}
+                            value={field.value}
+                            onChange={field.onChange}
+                            onBlur={field.onBlur}
+                            name=""
                             rows={4}
                             placeholder="Tell us about your interests, hobbies, and what you're passionate about..."
                             className="form-field"

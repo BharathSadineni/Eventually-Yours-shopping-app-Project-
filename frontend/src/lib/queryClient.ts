@@ -36,12 +36,17 @@ export async function apiRequest(
 
   const fetchOptions: RequestInit = {
     method,
+    ...options,
     headers: {
       "Content-Type": "application/json",
       ...(options.headers || {}),
     },
-    ...options,
   };
+
+  // Ensure Content-Type is always set correctly
+  if (fetchOptions.headers) {
+    (fetchOptions.headers as Record<string, string>)["Content-Type"] = "application/json";
+  }
 
   if (body !== undefined) {
     fetchOptions.body = JSON.stringify(body);
@@ -52,7 +57,18 @@ export async function apiRequest(
   const fullUrl =
     isRelativeApi && import.meta.env.PROD
       ? BACKEND_BASE_URL + url
+      : isRelativeApi
+      ? BACKEND_BASE_URL + url  // Always use full URL to bypass proxy issues
       : url;
+
+  console.log("apiRequest - fetchOptions:", {
+    method: fetchOptions.method,
+    headers: fetchOptions.headers,
+    body: fetchOptions.body,
+    url: fullUrl
+  });
+
+  console.log("apiRequest - final headers:", fetchOptions.headers);
 
   const response = await fetch(fullUrl, fetchOptions);
 

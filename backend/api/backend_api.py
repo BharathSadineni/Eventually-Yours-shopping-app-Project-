@@ -340,7 +340,7 @@ def get_shopping_recommendations():
             # Wait for result with reduced timeout for faster response
             try:
                 # Shorter timeout for production to prevent worker timeouts
-                timeout_seconds = 30 if IS_PRODUCTION else 45
+                timeout_seconds = 45 if IS_PRODUCTION else 45
                 result = future.result(timeout=timeout_seconds)
                 
                 # Remove from active requests

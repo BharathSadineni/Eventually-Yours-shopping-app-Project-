@@ -107,6 +107,16 @@ def store_user_info():
         print(f"Request content type: {request.content_type}")
         print(f"Request content length: {request.content_length}")
         
+        # Environment detection for this request
+        ENV = os.getenv("ENV", "development").lower()
+        FLASK_ENV = os.getenv("FLASK_ENV", "development").lower()
+        RENDER = os.getenv("RENDER", "false").lower()
+        IS_PRODUCTION = (ENV == "production" or 
+                         FLASK_ENV == "production" or 
+                         RENDER == "true" or
+                         "onrender.com" in os.getenv("RENDER_EXTERNAL_URL", ""))
+        print(f"Request environment: ENV={ENV}, FLASK_ENV={FLASK_ENV}, RENDER={RENDER}, IS_PRODUCTION={IS_PRODUCTION}")
+        
         # Check if request has JSON content
         if not request.is_json:
             print("Error: Request is not JSON")
@@ -279,6 +289,16 @@ def get_shopping_recommendations():
         print(f"Request content type: {request.content_type}")
         print(f"Request content length: {request.content_length}")
         
+        # Environment detection for this request
+        ENV = os.getenv("ENV", "development").lower()
+        FLASK_ENV = os.getenv("FLASK_ENV", "development").lower()
+        RENDER = os.getenv("RENDER", "false").lower()
+        IS_PRODUCTION = (ENV == "production" or 
+                         FLASK_ENV == "production" or 
+                         RENDER == "true" or
+                         "onrender.com" in os.getenv("RENDER_EXTERNAL_URL", ""))
+        print(f"Request environment: ENV={ENV}, FLASK_ENV={FLASK_ENV}, RENDER={RENDER}, IS_PRODUCTION={IS_PRODUCTION}")
+        
         # Check if request has JSON content
         if not request.is_json:
             print("Error: Request is not JSON")
@@ -319,7 +339,9 @@ def get_shopping_recommendations():
             
             # Wait for result with reduced timeout for faster response
             try:
-                result = future.result(timeout=45)  # Reduced from 60 to 45 seconds
+                # Shorter timeout for production to prevent worker timeouts
+                timeout_seconds = 30 if IS_PRODUCTION else 45
+                result = future.result(timeout=timeout_seconds)
                 
                 # Remove from active requests
                 with processing_lock:
@@ -465,9 +487,18 @@ def process_recommendation_request(request_data):
     session_id = request_data.get("session_id")
     shopping_input = request_data.get("shopping_input", {})
     
-    # Detect environment
+    # Detect environment - more robust detection
     ENV = os.getenv("ENV", "development").lower()
-    IS_PRODUCTION = ENV == "production"
+    FLASK_ENV = os.getenv("FLASK_ENV", "development").lower()
+    RENDER = os.getenv("RENDER", "false").lower()
+    
+    # Consider it production if any of these indicate production
+    IS_PRODUCTION = (ENV == "production" or 
+                     FLASK_ENV == "production" or 
+                     RENDER == "true" or
+                     "onrender.com" in os.getenv("RENDER_EXTERNAL_URL", ""))
+    
+    print(f"Environment detection: ENV={ENV}, FLASK_ENV={FLASK_ENV}, RENDER={RENDER}, IS_PRODUCTION={IS_PRODUCTION}")
 
     try:
         print(f"Processing recommendation request for session: {session_id}")
@@ -698,10 +729,12 @@ def process_recommendation_request(request_data):
 
         # --- PRODUCTION-ONLY LIMIT AND DELAY ---
         if IS_PRODUCTION:
-            max_categories = 4  # Limit to 4 categories in production
+            max_categories = 3  # Reduced from 4 to 3 for faster processing
             categories_to_process = categories[:max_categories]
+            print(f"Production mode: Processing {len(categories_to_process)} categories")
         else:
             categories_to_process = categories
+            print(f"Development mode: Processing {len(categories_to_process)} categories")
 
         for idx, category in enumerate(categories_to_process):
             category, products = fetch_category_products(category)
@@ -709,7 +742,7 @@ def process_recommendation_request(request_data):
             # Add delay between category scrapes in production
             if IS_PRODUCTION and idx < len(categories_to_process) - 1:
                 import time
-                time.sleep(random.uniform(2, 3))  # 2-3 seconds delay
+                time.sleep(random.uniform(1, 2))  # Reduced from 2-3 to 1-2 seconds
 
         # Gather all products
         all_products = []
@@ -719,9 +752,14 @@ def process_recommendation_request(request_data):
         # Check if we have any real scraped products
         valid_products = [p for p in all_products if p and p.get("title") and p.get("url")]
         
-        # Limit products for faster AI processing (top 6 products - reduced from 8)
-        if len(valid_products) > 6:
-            valid_products = valid_products[:6]
+        # More aggressive product limits in production
+        if IS_PRODUCTION:
+            max_products = 4  # Reduced from 6 to 4 for production
+        else:
+            max_products = 6
+            
+        if len(valid_products) > max_products:
+            valid_products = valid_products[:max_products]
         
         # Get currency symbol (moved here to fix scope issue)
         currency_symbol = get_currency_symbol(user_data.get("user_location", ""))

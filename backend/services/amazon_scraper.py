@@ -65,13 +65,13 @@ def amazon_category_top_products(
 
     # Try different search strategies to avoid 503 errors
     search_strategies = [
-        f"https://www.{domain}/s?k={quote_plus(search_query)}&s=best-sellers{price_filter}",
-        f"https://www.{domain}/s?k={quote_plus(search_query)}&s=review-rank{price_filter}",
-        f"https://www.{domain}/s?k={quote_plus(search_query)}{price_filter}",
+        ("best-sellers", f"https://www.{domain}/s?k={quote_plus(search_query)}&s=best-sellers{price_filter}"),
+        ("review-rank", f"https://www.{domain}/s?k={quote_plus(search_query)}&s=review-rank{price_filter}"),
+        ("default", f"https://www.{domain}/s?k={quote_plus(search_query)}{price_filter}"),
     ]
 
-    for strategy_idx, search_url in enumerate(search_strategies):
-        print(f"Trying search strategy {strategy_idx + 1}: {search_url}")
+    for strategy_idx, (strategy_name, search_url) in enumerate(search_strategies):
+        print(f"Trying {strategy_name} strategy: {search_url}")
         
         try:
             # Enhanced headers with better anti-detection
@@ -193,22 +193,22 @@ def amazon_category_top_products(
                     continue
             
             if products:
-                print(f"✅ Found {len(products)} products with strategy {strategy_idx + 1}")
+                print(f"✅ Found {len(products)} products with {strategy_name} strategy")
                 return products[:num_results]
             else:
-                print(f"No products found with strategy {strategy_idx + 1}")
+                print(f"No products found with {strategy_name} strategy")
                 continue
                     
         except requests.exceptions.HTTPError as e:
             if e.response.status_code == 503:
-                print(f"503 Server Error for {category} (strategy {strategy_idx + 1})")
+                print(f"503 Server Error for {category} ({strategy_name} strategy)")
                 time.sleep(random.uniform(2, 4))  # Wait longer for 503 errors
                 continue
             else:
                 print(f"HTTP Error {e.response.status_code} for {category}: {e}")
                 continue
         except requests.exceptions.Timeout:
-            print(f"Timeout for {category} (strategy {strategy_idx + 1})")
+            print(f"Timeout for {category} ({strategy_name} strategy)")
             continue
         except Exception as e:
             print(f"Amazon category scraping error: {e}")

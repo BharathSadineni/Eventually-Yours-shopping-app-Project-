@@ -59,7 +59,7 @@ pip install -r requirements.txt
 python main.py
 ```
 
-The backend API will be available at `https://eventually-yours-shopping-app-backend.onrender.com`
+The backend API will be available at `https://eventually-yours-shopping-app-project-production.up.railway.app`
 
 ## 🛠️ Features
 

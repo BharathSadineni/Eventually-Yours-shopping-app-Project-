@@ -25,7 +25,7 @@ export default defineConfig({
     host: "0.0.0.0",
     proxy: {
       '/api': {
-        target: 'https://eventually-yours-shopping-app-backend.onrender.com',
+        target: 'https://eventually-yours-shopping-app-project-production.up.railway.app',
         changeOrigin: true,
         secure: true,
       },

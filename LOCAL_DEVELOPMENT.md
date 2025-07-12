@@ -45,9 +45,9 @@ npm run dev
 
 ## URLs
 
-- **Backend API**: https://eventually-yours-shopping-app-backend.onrender.com
+- **Backend API**: https://eventually-yours-shopping-app-project-production.up.railway.app
 - **Frontend App**: http://localhost:5173
-- **Backend Health Check**: https://eventually-yours-shopping-app-backend.onrender.com/api/health
+- **Backend Health Check**: https://eventually-yours-shopping-app-project-production.up.railway.app/api/health
 
 ## Environment Variables
 
@@ -68,7 +68,7 @@ Get your API key from: https://makersuite.google.com/app/apikey
 
 ## API Endpoints
 
-All API calls from frontend are automatically proxied to `https://eventually-yours-shopping-app-backend.onrender.com` via Vite proxy configuration.
+All API calls from frontend are automatically proxied to `https://eventually-yours-shopping-app-project-production.up.railway.app` via Vite proxy configuration.
 
 ## Troubleshooting
 
@@ -93,7 +93,7 @@ To switch back to the deployed backend:
 
 1. **Frontend**: Change `BACKEND_BASE_URL` in `frontend/src/pages/shopping.tsx` back to:
    ```typescript
-   const BACKEND_BASE_URL = "https://eventually-yours-shopping-app-backend.onrender.com";
+   const BACKEND_BASE_URL = "https://eventually-yours-shopping-app-project-production.up.railway.app";
    ```
 
 2. **Vite Config**: Change proxy target in `frontend/vite.config.ts` back to:

@@ -1092,6 +1092,6 @@ def generate_fallback_products(shopping_request, user_data):
 
 if __name__ == "__main__":
     print("Starting Shopping Recommendation API...")
-    print("API will be available at: https://eventually-yours-shopping-app-backend.onrender.com/")
-    print("Health check: https://eventually-yours-shopping-app-backend.onrender.com/api/health")
+    print("API will be available at: https://eventually-yours-shopping-app-project-production.up.railway.app/")
+    print("Health check: https://eventually-yours-shopping-app-project-production.up.railway.app/api/health")
     app.run(debug=True, host="0.0.0.0", port=5000)

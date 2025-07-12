@@ -87,7 +87,7 @@ def init_session():
         })
     except Exception as e:
         print(f"Error initializing session: {e}")
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return jsonify({"status": "error", "message": str(e).strip()}), 500
 
 
 @app.route("/api/user-info", methods=["POST", "OPTIONS"])
@@ -209,7 +209,7 @@ def store_user_info():
         print(f"Error storing user info: {e}")
         import traceback
         print(f"Full traceback: {traceback.format_exc()}")
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return jsonify({"status": "error", "message": str(e).strip()}), 500
 
 
 # Helper function to get currency symbol based on user location
@@ -404,7 +404,7 @@ def get_shopping_recommendations():
                     if session_id in active_requests:
                         del active_requests[session_id]
                 
-                print(f"Error in concurrent processing: {e}")
+                print(f"Error in concurrent processing: {str(e).strip()}")
                 # Provide more specific error message based on the exception type
                 if "timeout" in str(e).lower():
                     error_msg = "Request timed out. Please try again with fewer categories."
@@ -423,12 +423,12 @@ def get_shopping_recommendations():
                 if session_id in active_requests:
                     del active_requests[session_id]
             
-            print(f"Error submitting to worker pool: {e}")
+            print(f"Error submitting to worker pool: {str(e).strip()}")
             return jsonify({"status": "error", "message": "Failed to process request"}), 500
 
     except Exception as e:
-        print(f"Main error: {e}")
-        return jsonify({"status": "error", "message": str(e)}), 500
+        print(f"Main error: {str(e).strip()}")
+        return jsonify({"status": "error", "message": str(e).strip()}), 500
 
 
 @app.route("/api/export-data/<session_id>", methods=["GET"])
@@ -442,7 +442,7 @@ def export_user_data(session_id):
         return jsonify({"status": "success", "data": user_data})
 
     except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return jsonify({"status": "error", "message": str(e).strip()}), 500
 
 
 @app.route("/api/cleanup-session", methods=["POST"])
@@ -466,7 +466,7 @@ def cleanup_session():
             }), 404
 
     except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return jsonify({"status": "error", "message": str(e).strip()}), 500
 
 
 @app.route("/api/request-status/<session_id>", methods=["GET"])
@@ -538,24 +538,40 @@ def get_worker_stats():
 
 def process_recommendation_request(request_data):
     """Process a single recommendation request concurrently"""
+    # Set global timeout for entire process
+    global_start_time = time.time()
+    global_timeout = 45  # 45 seconds total timeout
+    
     session_id = request_data.get("session_id")
     shopping_input = request_data.get("shopping_input", {})
     
-    # Detect environment - more robust detection
+    # Detect environment - more robust detection for Railway
     ENV = os.getenv("ENV", "development").lower()
     FLASK_ENV = os.getenv("FLASK_ENV", "development").lower()
     RENDER = os.getenv("RENDER", "false").lower()
+    RAILWAY_ENVIRONMENT = os.getenv("RAILWAY_ENVIRONMENT", "").lower()
+    RAILWAY_PROJECT_ID = os.getenv("RAILWAY_PROJECT_ID", "")
     
-    # Consider it production if any of these indicate production
+    # Consider it production if any of these indicate production or Railway deployment
     IS_PRODUCTION = (ENV == "production" or 
                      FLASK_ENV == "production" or 
                      RENDER == "true" or
-                     "onrender.com" in os.getenv("RENDER_EXTERNAL_URL", ""))
+                     RAILWAY_ENVIRONMENT == "production" or
+                     RAILWAY_PROJECT_ID != "" or  # If Railway project ID exists, we're on Railway
+                     "onrender.com" in os.getenv("RENDER_EXTERNAL_URL", "") or
+                     "railway.app" in os.getenv("RAILWAY_SERVICE_URL", "") or
+                     "railway.app" in os.getenv("RAILWAY_PUBLIC_DOMAIN", ""))
     
-    print(f"Environment detection: ENV={ENV}, FLASK_ENV={FLASK_ENV}, RENDER={RENDER}, IS_PRODUCTION={IS_PRODUCTION}")
+    print(f"Environment detection: ENV={ENV}, FLASK_ENV={FLASK_ENV}, RENDER={RENDER}, RAILWAY_ENV={RAILWAY_ENVIRONMENT}, RAILWAY_PROJECT={RAILWAY_PROJECT_ID}, IS_PRODUCTION={IS_PRODUCTION}")
 
     try:
         print(f"Processing recommendation request for session: {session_id}")
+        
+        # Check global timeout
+        elapsed = time.time() - global_start_time
+        if elapsed >= global_timeout:
+            print(f"⏰ Global timeout reached ({elapsed:.1f}s), returning error")
+            return {"status": "error", "message": "Request timed out. Please try again."}, 408
         
         if session_id not in user_sessions:
             return {"status": "error", "message": "Invalid session"}, 400
@@ -803,7 +819,7 @@ def process_recommendation_request(request_data):
         category_products = {}
 
         print(f"🚀 Starting concurrent processing with {len(categories_to_process)} categories using {max_workers} workers")
-        print(f"⏱️  Scraping timeout: 30 seconds maximum")
+        print(f"⏱️  Scraping timeout: 30 seconds maximum (IS_PRODUCTION={IS_PRODUCTION})")
 
         # Submit all categories for concurrent processing
         for idx, category in enumerate(categories_to_process):
@@ -820,15 +836,17 @@ def process_recommendation_request(request_data):
         # Collect results with 30-second timeout
         start_time = time.time()
         timeout_seconds = 30
+        timeout_reached = False
         
         for idx, (category, future) in enumerate(category_futures.items()):
             # Check if we've exceeded the 30-second timeout
             elapsed_time = time.time() - start_time
             if elapsed_time >= timeout_seconds:
                 print(f"⏰ 30-second timeout reached! Stopping scraping and using {successful_categories} successful categories")
+                timeout_reached = True
                 break
                 
-            print(f"🔄 Processing result {idx + 1}/{len(category_futures)}: {category}")
+            print(f"🔄 Processing result {idx + 1}/{len(category_futures)}: {category} (elapsed: {elapsed_time:.1f}s)")
             max_retries = 1  # Allow 1 retry per category in concurrent mode
             retry_count = 0
             success = False
@@ -839,6 +857,7 @@ def process_recommendation_request(request_data):
                     remaining_time = timeout_seconds - (time.time() - start_time)
                     if remaining_time <= 0:
                         print(f"⏰ Timeout reached while processing {category}, stopping scraping")
+                        timeout_reached = True
                         break
                         
                     # Wait for each category with remaining timeout
@@ -849,7 +868,7 @@ def process_recommendation_request(request_data):
                     print(f"✅ Successfully processed category: {category} ({len(products)} products)")
                 except Exception as e:
                     retry_count += 1
-                    print(f"❌ Error processing category {category} (attempt {retry_count}/{max_retries + 1}): {e}")
+                                            print(f"❌ Error processing category {category} (attempt {retry_count}/{max_retries + 1}): {str(e).strip()}")
                     
                     if retry_count <= max_retries:
                         print(f"🔄 Retrying category {category} in 3 seconds...")
@@ -867,6 +886,8 @@ def process_recommendation_request(request_data):
 
         elapsed_time = time.time() - start_time
         print(f"📊 Category processing summary: {successful_categories} successful, {failed_categories} failed in {elapsed_time:.1f} seconds")
+        if timeout_reached:
+            print(f"⚠️  Processing was cut off due to 30-second timeout")
 
         # Check if we have any successful categories
         if successful_categories == 0:
@@ -907,6 +928,16 @@ def process_recommendation_request(request_data):
             print(f"⏰ Total processing timeout reached ({total_elapsed:.1f}s), proceeding with available products")
             
         print(f"📊 Proceeding to Gemini ranking with {successful_categories} successful categories")
+
+        # Check global timeout before Gemini processing
+        global_elapsed = time.time() - global_start_time
+        if global_elapsed >= global_timeout:
+            print(f"⏰ Global timeout reached before Gemini processing ({global_elapsed:.1f}s)")
+            # Use whatever products we have
+            if successful_categories > 0:
+                print(f"📊 Using {successful_categories} successful categories despite timeout")
+            else:
+                return {"status": "error", "message": "Request timed out. Please try again."}, 408
 
         # Gather all products
         all_products = []
@@ -960,6 +991,47 @@ def process_recommendation_request(request_data):
                 return response_data
             else:
                 return {"status": "error", "message": "Unable to fetch product recommendations at this time. Please try again later."}, 503
+
+        # Check global timeout before Gemini API call
+        global_elapsed = time.time() - global_start_time
+        if global_elapsed >= global_timeout:
+            print(f"⏰ Global timeout reached before Gemini API ({global_elapsed:.1f}s), using scraped products directly")
+            # Use scraped products directly without Gemini ranking
+            formatted_products = []
+            for i, product in enumerate(valid_products[:6]):  # Limit to 6 for direct use
+                rating = 0
+                try:
+                    rating_str = str(product.get("average_rating", "0"))
+                    rating_clean = "".join(
+                        c for c in rating_str if c.isdigit() or c == "."
+                    )
+                    if rating_clean:
+                        rating = min(max(float(rating_clean), 0), 5)
+                except:
+                    pass
+
+                formatted_products.append({
+                    "id": str(i + 1),
+                    "name": product["title"],
+                    "price": product.get("price_value", 0) or 0,
+                    "currency": currency_symbol,
+                    "image": product.get("image_url", "/placeholder.svg"),
+                    "buyUrl": product.get("url", ""),
+                    "category": "Scraped",
+                    "rating": rating,
+                    "reasoning": "Product found through scraping",
+                })
+
+            response_data = {
+                "status": "success",
+                "categories": categories,
+                "products": formatted_products,
+                "ai_recommendations": json.dumps([]),
+                "note": "Using scraped products due to timeout"
+            }
+            
+            user_sessions[session_id]["results"] = response_data
+            return response_data
 
         # Now sort these products using the SortingAlgorithm
         sorting_algo = SortingAlgorithm(
@@ -1131,7 +1203,7 @@ def process_recommendation_request(request_data):
             return response_data
 
         except Exception as e:
-            print(f"Error in AI processing: {e}")
+                            print(f"Error in AI processing: {str(e).strip()}")
 
             # Only use scraped products if they exist and are valid
             if valid_products:
@@ -1177,7 +1249,7 @@ def process_recommendation_request(request_data):
                 return {"status": "error", "message": "Unable to fetch product recommendations at this time. Please try again later."}, 503
 
     except Exception as e:
-        print(f"Error processing recommendation request: {e}")
+        print(f"Error processing recommendation request: {str(e).strip()}")
         
         # Check if it's an Amazon-related error
         error_str = str(e).lower()
@@ -1190,7 +1262,7 @@ def process_recommendation_request(request_data):
         elif "connection" in error_str:
             error_msg = "Network connection issue. Please check your internet connection and try again."
         else:
-            error_msg = f"Request processing failed: {str(e)}"
+            error_msg = f"Request processing failed: {str(e).strip()}"
         
         return {"status": "error", "message": error_msg}, 500
 
@@ -1395,7 +1467,7 @@ def generate_fallback_products(shopping_request, user_data):
             return sample_products.get('tech', [])
             
     except Exception as e:
-        print(f"Error generating fallback products: {e}")
+        print(f"Error generating fallback products: {str(e).strip()}")
         return []
 
 

@@ -241,7 +241,7 @@ def amazon_category_top_products(
                             break
                         
                 except Exception as e:
-                    print(f"Error extracting product data: {e}")
+                    print(f"Error extracting product data: {str(e).strip()}")
                     continue
             
             if products:
@@ -257,13 +257,13 @@ def amazon_category_top_products(
                 time.sleep(random.uniform(3, 5))  # Wait longer for 503 errors
                 continue
             else:
-                print(f"HTTP Error {e.response.status_code} for {category}: {e}")
+                print(f"HTTP Error {e.response.status_code} for {category}: {str(e).strip()}")
                 continue
         except requests.exceptions.Timeout:
             print(f"Timeout for {category} ({strategy_name} strategy)")
             continue
         except Exception as e:
-            print(f"Amazon category scraping error: {e}")
+            print(f"Amazon category scraping error: {str(e).strip()}")
             continue
 
     print(f"No products found for {category} with any strategy")
@@ -337,7 +337,7 @@ def scrape_amazon_product(url):
         }
         
     except Exception as e:
-        print(f"Error scraping product {url}: {e}")
+        print(f"Error scraping product {url}: {str(e).strip()}")
         return None
 
 

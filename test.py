@@ -87,7 +87,7 @@ def test_shopping_recommendations(session_id):
         "shopping_input": {
             "occasion": "Personal Use",
             "brandsPreferred": "",
-            "shoppingInput": "Suggest me something"
+            "shoppingInput": "I need gaming accessories and tech gadgets for my setup. Looking for headphones, keyboards, mice, and other gaming peripherals."
         }
     }
     
@@ -103,6 +103,21 @@ def test_shopping_recommendations(session_id):
             print("✅ Shopping recommendations successful")
             print(f"Status: {result.get('status')}")
             print(f"Products found: {len(result.get('products', []))}")
+            print(f"Processing time: {result.get('processing_time', 'N/A')}")
+            print(f"Successful categories: {result.get('successful_categories', 'N/A')}")
+            print(f"Total categories: {result.get('total_categories', 'N/A')}")
+            
+            # Display the products
+            products = result.get('products', [])
+            if products:
+                print(f"\n📦 Found {len(products)} products:")
+                for i, product in enumerate(products, 1):
+                    print(f"{i}. {product.get('name', 'No name')}")
+                    print(f"   Price: {product.get('price', 0)} {product.get('currency', '$')}")
+                    print(f"   Category: {product.get('category', 'Unknown')}")
+                    print(f"   Rating: {product.get('rating', 0)}")
+                    print()
+            
             return True
         else:
             print(f"❌ Shopping recommendations failed: {response.status_code}")
@@ -115,6 +130,69 @@ def test_shopping_recommendations(session_id):
     except Exception as e:
         print(f"❌ Shopping recommendations error: {e}")
         return False
+
+def test_multiple_shopping_scenarios(session_id):
+    """Test multiple shopping scenarios to see different product counts"""
+    print("\n--- Multiple Shopping Scenarios Test ---")
+    
+    test_scenarios = [
+        {
+            "name": "Gaming Setup (Specific)",
+            "shopping_input": "I need gaming accessories and tech gadgets for my setup. Looking for headphones, keyboards, mice, and other gaming peripherals."
+        },
+        {
+            "name": "Tech Gadgets (Broad)",
+            "shopping_input": "Show me various tech gadgets and electronics within my budget"
+        },
+        {
+            "name": "Fashion Items",
+            "shopping_input": "I'm looking for clothing and fashion items, especially t-shirts and hoodies"
+        },
+        {
+            "name": "Generic Request",
+            "shopping_input": "Suggest me something"
+        }
+    ]
+    
+    for i, scenario in enumerate(test_scenarios, 1):
+        print(f"\n--- Scenario {i}: {scenario['name']} ---")
+        
+        shopping_data = {
+            "session_id": session_id,
+            "shopping_input": {
+                "occasion": "Personal Use",
+                "brandsPreferred": "",
+                "shoppingInput": scenario["shopping_input"]
+            }
+        }
+        
+        try:
+            response = requests.post(
+                f"{BACKEND_URL}/api/shopping-recommendations",
+                json=shopping_data,
+                timeout=TIMEOUT
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                products = result.get('products', [])
+                print(f"✅ {scenario['name']}: {len(products)} products")
+                print(f"   Processing time: {result.get('processing_time', 'N/A')}")
+                print(f"   Successful categories: {result.get('successful_categories', 'N/A')}")
+                
+                # Show first 3 products as preview
+                if products:
+                    print("   Preview:")
+                    for j, product in enumerate(products[:3], 1):
+                        print(f"   {j}. {product.get('name', 'No name')[:50]}...")
+            else:
+                print(f"❌ {scenario['name']}: Failed with status {response.status_code}")
+                
+        except Exception as e:
+            print(f"❌ {scenario['name']}: Error - {e}")
+        
+        # Wait between requests
+        time.sleep(2)
 
 def main():
     print("Deployed Backend Test Tool")
@@ -138,7 +216,10 @@ def main():
         print("\n❌ User info storage failed. Stopping tests.")
         return
     
-    # Test shopping recommendations
+    # Test multiple shopping scenarios
+    test_multiple_shopping_scenarios(session_id)
+    
+    # Test single shopping recommendations
     if not test_shopping_recommendations(session_id):
         print("\n❌ Shopping recommendations failed.")
         return

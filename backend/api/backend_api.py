@@ -806,20 +806,12 @@ def process_recommendation_request(request_data):
                 scored_products.sort(key=lambda x: x[1], reverse=True)
                 top_products = [product for product, score in scored_products[:3]]  # Top 3 products
                 
-                                print(f"✅ Successfully processed {len(top_products)} products for {category}")
+                print(f"✅ Successfully processed {len(top_products)} products for {category}")
                 return category, top_products
                 
             except Exception as e:
                 print(f"❌ Error fetching products for {category}: {str(e)}")
                 return category, []
-                    # If no price or budget, include product
-                    scored_products.append((product, product_score))
-
-            # Sort products by score (brand matches first, then by budget fit)
-            scored_products.sort(key=lambda x: x[1], reverse=True)
-            
-            # Return only the product objects (without scores)
-            return category, [product for product, score in scored_products]
 
         # --- PRODUCTION-ONLY LIMIT AND DELAY ---
         if IS_PRODUCTION:
@@ -893,7 +885,7 @@ def process_recommendation_request(request_data):
                     print(f"✅ Successfully processed category: {category} ({len(products)} products)")
                 except Exception as e:
                     retry_count += 1
-                                            print(f"❌ Error processing category {category} (attempt {retry_count}/{max_retries + 1}): {str(e).strip()}")
+                    print(f"❌ Error processing category {category} (attempt {retry_count}/{max_retries + 1}): {str(e).strip()}")
                     
                     if retry_count <= max_retries:
                         print(f"🔄 Retrying category {category} in 3 seconds...")
@@ -1066,23 +1058,23 @@ def process_recommendation_request(request_data):
 
         try:
             # Get AI sorted recommendations with timeout
-                    print(f"🤖 Calling Gemini API for product ranking...")
-        print(f"📊 Sending {len(valid_products)} scraped products to Gemini for ranking:")
-        for i, product in enumerate(valid_products, 1):
-            print(f"   {i}. {product.get('title', 'No title')} - {product.get('price', 'No price')}")
-        
-        gemini_start_time = time.time()
-        gemini_timeout = 15  # 15 seconds for Gemini API
+            print(f"🤖 Calling Gemini API for product ranking...")
+            print(f"📊 Sending {len(valid_products)} scraped products to Gemini for ranking:")
+            for i, product in enumerate(valid_products, 1):
+                print(f"   {i}. {product.get('title', 'No title')} - {product.get('price', 'No price')}")
+            
+            gemini_start_time = time.time()
+            gemini_timeout = 15  # 15 seconds for Gemini API
             
             sorted_products_text = sorting_algo.get_sorted_products(
                 user_input, user_data, valid_products
             )
             
-                    gemini_elapsed = time.time() - gemini_start_time
-        print(f"✅ Gemini API completed in {gemini_elapsed:.1f} seconds")
-        print(f"🤖 Gemini's response:")
-        print(sorted_products_text)
-        print(f"📊 End of Gemini response")
+            gemini_elapsed = time.time() - gemini_start_time
+            print(f"✅ Gemini API completed in {gemini_elapsed:.1f} seconds")
+            print(f"🤖 Gemini's response:")
+            print(sorted_products_text)
+            print(f"📊 End of Gemini response")
 
             # Parse AI recommendations
             ai_recommendations = parse_ai_recommendations(sorted_products_text)
@@ -1242,7 +1234,7 @@ def process_recommendation_request(request_data):
             return response_data
 
         except Exception as e:
-                            print(f"Error in AI processing: {str(e).strip()}")
+            print(f"Error in AI processing: {str(e).strip()}")
 
             # Only use scraped products if they exist and are valid
             if valid_products:

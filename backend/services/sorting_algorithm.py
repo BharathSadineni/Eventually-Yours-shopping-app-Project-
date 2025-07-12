@@ -12,23 +12,35 @@ class SortingAlgorithm:
 
     def build_prompt(self, user_input, user_profile_details, amazon_scraper_results):
         prompt = (
-            "You are a recommendation engine. Based on the following data:\n\n"
-            "User Input: {}\n\n"
-            "User Profile Details: {}\n\n"
-            "Amazon Scraper Results: {}\n\n"
-            "Each Amazon scraper result includes the product title, URL, price, rating, and image URL.\n\n"
-            "Your task is to:\n\n"
-            "Analyze the user input and profile details to infer the user's preferences, interests, budget, and needs.\n"
-            "Evaluate and rank the Amazon scraper results accordingly.\n"
-            "Return an ordered list of the products starting with the most relevant match.\n\n"
-            "Output Format (for each recommended product):\n\n"
-            "Product: [Product Title]  \n"
-            "URL: [Product URL]  \n"
-            "Price: [Product Price]  \n"
-            "Rating: [Product Rating]  \n"
-            "Image URL: [Image URL]  \n"
-            "Reasoning: [Provide a detailed, varied, and specific explanation for why this product suits the user. Highlight unique features, benefits, or aspects that match the user's preferences and needs. Do not reveal the user's name or personal details; refer to the user simply as 'the user'. Avoid generic, repetitive, or vague phrases. Ensure the reasoning reflects the user's gender, location, and stated interests accurately.]\n\n"
-            "Only include products in the ranked list. Ensure that your recommendations are concise, relevant, and justified."
+            "You are an intelligent shopping recommendation engine. Based on the following data:\n\n"
+            "USER'S SHOPPING REQUEST: {}\n\n"
+            "USER PROFILE: {}\n\n"
+            "AVAILABLE PRODUCTS FROM AMAZON: {}\n\n"
+            "TASK: Analyze the user's specific shopping request and select the MOST RELEVANT products from the available Amazon products.\n\n"
+            "INSTRUCTIONS:\n"
+            "1. PRIORITIZE the user's shopping request above all else\n"
+            "2. Select 6-10 products that best match what the user is looking for\n"
+            "3. ONLY include products that are genuinely relevant to the shopping request\n"
+            "4. If fewer than 6 products are truly relevant, select only the relevant ones\n"
+            "5. Consider the user's profile (age, gender, location, interests) as secondary factors\n"
+            "6. Focus on products that directly address the shopping request\n"
+            "7. If the shopping request is vague, use the user's interests and categories to guide selection\n\n"
+            "OUTPUT FORMAT (for each recommended product):\n\n"
+            "Product: [Product Title]\n"
+            "URL: [Product URL]\n"
+            "Price: [Product Price]\n"
+            "Rating: [Product Rating]\n"
+            "Image URL: [Image URL]\n"
+            "Reasoning: [Explain specifically how this product matches the user's shopping request. Be specific about features, benefits, and why it's relevant to what they're looking for. Reference the shopping request directly.]\n\n"
+            "IMPORTANT:\n"
+            "- Select 6-10 products maximum, but ONLY if they are relevant\n"
+            "- Quality over quantity: prefer fewer relevant products over many irrelevant ones\n"
+            "- If fewer than 6 products are relevant, select only the relevant ones\n"
+            "- Focus on relevance to the shopping request\n"
+            "- Provide specific, detailed reasoning for each selection\n"
+            "- Ensure variety while maintaining relevance\n"
+            "- Do not include products that don't match the shopping request well\n"
+            "- If no products are relevant, return an empty list\n"
         ).format(
             user_input,
             json.dumps(user_profile_details),
@@ -47,7 +59,8 @@ class SortingAlgorithm:
         headers = {"Content-Type": "application/json"}
         data = {"contents": [{"parts": [{"text": prompt}]}]}
 
-        response = requests.post(url, headers=headers, json=data)
+        # Add timeout to the API call
+        response = requests.post(url, headers=headers, json=data, timeout=15)
         if response.status_code == 200:
             result = response.json()
             output_text = ""

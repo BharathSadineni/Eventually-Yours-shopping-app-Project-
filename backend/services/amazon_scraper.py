@@ -34,9 +34,14 @@ def amazon_category_top_products(
     - Minimal delays
     - Better anti-detection to reduce 503 errors
     - Rate limiting for concurrent requests
+    - 15-second timeout per category
     """
     # Apply rate limiting for concurrent requests
     _rate_limit_request()
+    
+    # Set timeout for this category
+    start_time = time.time()
+    category_timeout = 15  # 15 seconds per category
     
     user_agents = [
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -93,6 +98,12 @@ def amazon_category_top_products(
     ]
 
     for strategy_idx, (strategy_name, search_url) in enumerate(search_strategies):
+        # Check timeout before each strategy
+        elapsed_time = time.time() - start_time
+        if elapsed_time >= category_timeout:
+            print(f"⏰ Category timeout reached for {category}, stopping search")
+            break
+            
         print(f"Trying {strategy_name} strategy: {search_url}")
         
         try:
@@ -127,6 +138,12 @@ def amazon_category_top_products(
             else:
                 time.sleep(random.uniform(1.0, 2.0))  # Longer for retries
             
+            # Check timeout after delay
+            elapsed_time = time.time() - start_time
+            if elapsed_time >= category_timeout:
+                print(f"⏰ Category timeout reached for {category} after delay")
+                break
+            
             # Fast timeout
             response = session.get(search_url, timeout=8)  # Increased timeout slightly
             
@@ -153,6 +170,12 @@ def amazon_category_top_products(
             product_containers = soup.select("[data-component-type='s-search-result']")[:12]
             
             for container in product_containers:
+                # Check timeout during product extraction
+                elapsed_time = time.time() - start_time
+                if elapsed_time >= category_timeout:
+                    print(f"⏰ Category timeout reached for {category} during product extraction")
+                    break
+                    
                 try:
                     # Extract product URL
                     link_elem = container.select_one("a.a-link-normal.s-no-outline")

@@ -12,6 +12,7 @@ import re
 from threading import Lock
 from queue import Queue
 import random
+import time
 
 app = Flask(__name__)
 app.config['APP_NAME'] = 'Eventually Yours Shopping App'
@@ -243,7 +244,7 @@ def parse_ai_recommendations(sorted_products_text):
     """Parse AI recommendations text into structured product objects"""
     import re
 
-    # Extract product details using regex
+    # Extract product details using regex - improved to handle more flexible formatting
     product_pattern = r"Product: (.*?)\nURL: (.*?)\nPrice: [£$€]?([\d.,]+)\nRating: ([\d.]+)\nImage URL: (.*?)\nReasoning: (.*?)(?=\n\nProduct:|$)"
     matches = re.finditer(product_pattern, sorted_products_text, re.DOTALL)
 
@@ -258,16 +259,59 @@ def parse_ai_recommendations(sorted_products_text):
         except ValueError:
             price = 0.0
 
+        # Clean and validate rating
+        try:
+            rating_value = float(rating.strip())
+            if rating_value < 0 or rating_value > 5:
+                rating_value = 4.0  # Default if rating is out of range
+        except ValueError:
+            rating_value = 4.0
+
         product = {
             "title": name.strip(),
             "url": url.strip(),
             "price": price,
-            "rating": float(rating.strip()),
+            "rating": rating_value,
             "image_url": image.strip(),
             "reasoning": reasoning.strip(),
         }
         ai_recommendations.append(product)
 
+    # If no products found with the main pattern, try a more flexible approach
+    if not ai_recommendations:
+        # Try to extract products with a more flexible pattern
+        flexible_pattern = r"Product: (.*?)\n.*?Price: [£$€]?([\d.,]+).*?Rating: ([\d.]+).*?Reasoning: (.*?)(?=\n\nProduct:|$)"
+        flexible_matches = re.finditer(flexible_pattern, sorted_products_text, re.DOTALL)
+        
+        for match in flexible_matches:
+            name, price_str, rating, reasoning = match.groups()
+            
+            # Clean price string
+            price_clean = price_str.replace(",", "").strip()
+            try:
+                price = float(price_clean)
+            except ValueError:
+                price = 0.0
+
+            # Clean and validate rating
+            try:
+                rating_value = float(rating.strip())
+                if rating_value < 0 or rating_value > 5:
+                    rating_value = 4.0
+            except ValueError:
+                rating_value = 4.0
+
+            product = {
+                "title": name.strip(),
+                "url": "",  # URL not found in flexible pattern
+                "price": price,
+                "rating": rating_value,
+                "image_url": "",  # Image URL not found in flexible pattern
+                "reasoning": reasoning.strip(),
+            }
+            ai_recommendations.append(product)
+
+    print(f"📊 Parsed {len(ai_recommendations)} AI recommendations")
     return ai_recommendations
 
 
@@ -759,6 +803,7 @@ def process_recommendation_request(request_data):
         category_products = {}
 
         print(f"🚀 Starting concurrent processing with {len(categories_to_process)} categories using {max_workers} workers")
+        print(f"⏱️  Scraping timeout: 30 seconds maximum")
 
         # Submit all categories for concurrent processing
         for idx, category in enumerate(categories_to_process):
@@ -770,10 +815,19 @@ def process_recommendation_request(request_data):
         successful_categories = 0
         failed_categories = 0
 
-        print(f"⏳ Waiting for {len(category_futures)} categories to complete...")
+        print(f"⏳ Waiting for {len(category_futures)} categories to complete (30 second timeout)...")
 
-        # Collect results as they complete
+        # Collect results with 30-second timeout
+        start_time = time.time()
+        timeout_seconds = 30
+        
         for idx, (category, future) in enumerate(category_futures.items()):
+            # Check if we've exceeded the 30-second timeout
+            elapsed_time = time.time() - start_time
+            if elapsed_time >= timeout_seconds:
+                print(f"⏰ 30-second timeout reached! Stopping scraping and using {successful_categories} successful categories")
+                break
+                
             print(f"🔄 Processing result {idx + 1}/{len(category_futures)}: {category}")
             max_retries = 1  # Allow 1 retry per category in concurrent mode
             retry_count = 0
@@ -781,8 +835,14 @@ def process_recommendation_request(request_data):
             
             while retry_count <= max_retries and not success:
                 try:
-                    # Wait for each category with timeout
-                    category_name, products = future.result(timeout=30)  # 30 second timeout per category
+                    # Calculate remaining time for this category
+                    remaining_time = timeout_seconds - (time.time() - start_time)
+                    if remaining_time <= 0:
+                        print(f"⏰ Timeout reached while processing {category}, stopping scraping")
+                        break
+                        
+                    # Wait for each category with remaining timeout
+                    category_name, products = future.result(timeout=remaining_time)
                     category_products[category] = products
                     successful_categories += 1
                     success = True
@@ -803,9 +863,10 @@ def process_recommendation_request(request_data):
                         failed_categories += 1
 
         # Shutdown the worker pool
-        category_worker_pool.shutdown(wait=True)
+        category_worker_pool.shutdown(wait=False)  # Don't wait for completion since we have timeout
 
-        print(f"📊 Category processing summary: {successful_categories} successful, {failed_categories} failed")
+        elapsed_time = time.time() - start_time
+        print(f"📊 Category processing summary: {successful_categories} successful, {failed_categories} failed in {elapsed_time:.1f} seconds")
 
         # Check if we have any successful categories
         if successful_categories == 0:
@@ -840,6 +901,13 @@ def process_recommendation_request(request_data):
             else:
                 return {"status": "error", "message": "Unable to fetch product recommendations. Amazon is currently blocking requests. Please try again later."}, 503
 
+        # Check total processing time
+        total_elapsed = time.time() - start_time
+        if total_elapsed >= 45:  # 45 second total timeout
+            print(f"⏰ Total processing timeout reached ({total_elapsed:.1f}s), proceeding with available products")
+            
+        print(f"📊 Proceeding to Gemini ranking with {successful_categories} successful categories")
+
         # Gather all products
         all_products = []
         for products in category_products.values():
@@ -848,11 +916,11 @@ def process_recommendation_request(request_data):
         # Check if we have any real scraped products
         valid_products = [p for p in all_products if p and p.get("title") and p.get("url")]
         
-        # More aggressive product limits in production
+        # Increased product limits to better utilize scraped data
         if IS_PRODUCTION:
-            max_products = 4  # Reduced from 6 to 4 for production
+            max_products = 8  # Increased from 4 to 8 for production
         else:
-            max_products = 6
+            max_products = 10  # Increased from 6 to 10 for development
             
         if len(valid_products) > max_products:
             valid_products = valid_products[:max_products]
@@ -900,10 +968,17 @@ def process_recommendation_request(request_data):
         )
 
         try:
-            # Get AI sorted recommendations
+            # Get AI sorted recommendations with timeout
+            print(f"🤖 Calling Gemini API for product ranking...")
+            gemini_start_time = time.time()
+            gemini_timeout = 15  # 15 seconds for Gemini API
+            
             sorted_products_text = sorting_algo.get_sorted_products(
                 user_input, user_data, valid_products
             )
+            
+            gemini_elapsed = time.time() - gemini_start_time
+            print(f"✅ Gemini API completed in {gemini_elapsed:.1f} seconds")
 
             # Parse AI recommendations
             ai_recommendations = parse_ai_recommendations(sorted_products_text)
@@ -919,6 +994,9 @@ def process_recommendation_request(request_data):
                     scraped_products_map[title_key] = product
 
             # Process AI recommendations and match with scraped data
+            matched_products = []
+            unmatched_ai_products = []
+            
             for i, ai_product in enumerate(ai_recommendations):
                 ai_title = ai_product.get("title", "").strip()
                 if not ai_title:
@@ -932,20 +1010,26 @@ def process_recommendation_request(request_data):
                 if ai_title_key in scraped_products_map:
                     scraped_product = scraped_products_map[ai_title_key]
                 else:
-                    # Partial match
+                    # Partial match - try to find the best match
+                    best_match = None
+                    best_match_score = 0
+                    
                     for scraped_title_key, product in scraped_products_map.items():
-                        if (
-                            ai_title_key in scraped_title_key
-                            or scraped_title_key in ai_title_key
-                        ):
-                            scraped_product = product
-                            break
+                        # Calculate similarity score
+                        if ai_title_key in scraped_title_key or scraped_title_key in ai_title_key:
+                            score = len(set(ai_title_key.split()) & set(scraped_title_key.split()))
+                            if score > best_match_score:
+                                best_match_score = score
+                                best_match = product
+                    
+                    if best_match and best_match_score > 0:
+                        scraped_product = best_match
 
-                # Only add products that have real scraped data
+                # Add to matched products if we found a match
                 if scraped_product:
                     # Use scraped data as primary source
                     product_data = {
-                        "id": str(i + 1),
+                        "id": str(len(matched_products) + 1),
                         "name": scraped_product["title"],
                         "price": scraped_product.get("price_value", 0),
                         "currency": currency_symbol,
@@ -969,12 +1053,34 @@ def process_recommendation_request(request_data):
                         except:
                             pass
 
-                    formatted_products.append(product_data)
+                    matched_products.append(product_data)
+                else:
+                    # Keep track of unmatched AI products for potential fallback
+                    unmatched_ai_products.append(ai_product)
 
-            # If no AI recommendations matched with scraped data, use scraped products directly
-            if not formatted_products and valid_products:
-                # Limit to top 4 products for faster processing (reduced from 6)
-                for i, product in enumerate(valid_products[:4]):
+            # Use matched products as primary result
+            formatted_products = matched_products
+
+            # If we don't have enough matched products, add some unmatched AI products
+            if len(formatted_products) < 10 and unmatched_ai_products:  # Allow up to 10 products
+                print(f"📊 Adding {len(unmatched_ai_products)} unmatched AI products to supplement results")
+                for i, ai_product in enumerate(unmatched_ai_products[:10 - len(formatted_products)]):  # Allow up to 10 products
+                    formatted_products.append({
+                        "id": str(len(formatted_products) + 1),
+                        "name": ai_product.get("title", "Recommended Product"),
+                        "price": ai_product.get("price", 0),
+                        "currency": currency_symbol,
+                        "image": ai_product.get("image_url", "/placeholder.svg"),
+                        "buyUrl": ai_product.get("url", ""),
+                        "category": "AI Recommended",
+                        "rating": ai_product.get("rating", 4.0),
+                        "reasoning": ai_product.get("reasoning", "AI recommended based on your request"),
+                    })
+
+            # If still not enough products, use scraped products directly
+            if len(formatted_products) < 10 and valid_products:  # Allow up to 10 products
+                print(f"📊 Adding {min(10 - len(formatted_products), len(valid_products))} scraped products to supplement results")
+                for i, product in enumerate(valid_products[:10 - len(formatted_products)]):  # Allow up to 10 products
                     rating = 0
                     try:
                         rating_str = str(product.get("average_rating", "0"))
@@ -988,7 +1094,7 @@ def process_recommendation_request(request_data):
 
                     formatted_products.append(
                         {
-                            "id": str(i + 1),
+                            "id": str(len(formatted_products) + 1),
                             "name": product["title"],
                             "price": product.get("price_value", 0) or 0,
                             "currency": currency_symbol,
@@ -1000,6 +1106,12 @@ def process_recommendation_request(request_data):
                         }
                     )
 
+            print(f"📊 Final result: {len(formatted_products)} products (AI matched: {len(matched_products)}, supplemented: {len(formatted_products) - len(matched_products)})")
+
+            # Calculate total processing time
+            total_processing_time = time.time() - start_time
+            print(f"⏱️  Total processing time: {total_processing_time:.1f} seconds")
+
             # Only return response if we have real products
             if not formatted_products:
                 return {"status": "error", "message": "Unable to fetch product recommendations at this time. Please try again later."}, 503
@@ -1010,6 +1122,9 @@ def process_recommendation_request(request_data):
                 "categories": categories,
                 "products": formatted_products,
                 "ai_recommendations": json.dumps(ai_recommendations),
+                "processing_time": f"{total_processing_time:.1f}s",
+                "successful_categories": successful_categories,
+                "total_categories": len(categories_to_process)
             }
 
             user_sessions[session_id]["results"] = response_data
@@ -1021,8 +1136,8 @@ def process_recommendation_request(request_data):
             # Only use scraped products if they exist and are valid
             if valid_products:
                 fallback_products = []
-                # Limit to top 4 products for faster processing (reduced from 6)
-                for i, product in enumerate(valid_products[:4]):
+                # Allow up to 10 products for better user experience
+                for i, product in enumerate(valid_products[:10]):  # Increased from 4 to 10
                     rating = 0
                     try:
                         rating_str = str(product.get("average_rating", "0"))
@@ -1109,6 +1224,27 @@ def generate_fallback_products(shopping_request, user_data):
                     "image_url": "/placeholder.svg",
                     "url": "https://www.amazon.com",
                     "rating": 4.3
+                },
+                {
+                    "title": "USB-C Fast Charging Cable",
+                    "price_value": 12.99,
+                    "image_url": "/placeholder.svg",
+                    "url": "https://www.amazon.com",
+                    "rating": 4.1
+                },
+                {
+                    "title": "Wireless Charging Pad",
+                    "price_value": 19.99,
+                    "image_url": "/placeholder.svg",
+                    "url": "https://www.amazon.com",
+                    "rating": 4.0
+                },
+                {
+                    "title": "Laptop Cooling Pad",
+                    "price_value": 34.99,
+                    "image_url": "/placeholder.svg",
+                    "url": "https://www.amazon.com",
+                    "rating": 4.2
                 }
             ],
             'sports': [
@@ -1132,6 +1268,27 @@ def generate_fallback_products(shopping_request, user_data):
                     "image_url": "/placeholder.svg",
                     "url": "https://www.amazon.com",
                     "rating": 4.4
+                },
+                {
+                    "title": "Resistance Bands Set",
+                    "price_value": 15.99,
+                    "image_url": "/placeholder.svg",
+                    "url": "https://www.amazon.com",
+                    "rating": 4.3
+                },
+                {
+                    "title": "Foam Roller",
+                    "price_value": 24.99,
+                    "image_url": "/placeholder.svg",
+                    "url": "https://www.amazon.com",
+                    "rating": 4.2
+                },
+                {
+                    "title": "Jump Rope - Adjustable",
+                    "price_value": 12.99,
+                    "image_url": "/placeholder.svg",
+                    "url": "https://www.amazon.com",
+                    "rating": 4.1
                 }
             ],
             'gaming': [
@@ -1155,6 +1312,27 @@ def generate_fallback_products(shopping_request, user_data):
                     "image_url": "/placeholder.svg",
                     "url": "https://www.amazon.com",
                     "rating": 4.0
+                },
+                {
+                    "title": "Gaming Mouse Pad",
+                    "price_value": 14.99,
+                    "image_url": "/placeholder.svg",
+                    "url": "https://www.amazon.com",
+                    "rating": 4.3
+                },
+                {
+                    "title": "Controller Stand",
+                    "price_value": 19.99,
+                    "image_url": "/placeholder.svg",
+                    "url": "https://www.amazon.com",
+                    "rating": 4.0
+                },
+                {
+                    "title": "Gaming Chair Cushion",
+                    "price_value": 29.99,
+                    "image_url": "/placeholder.svg",
+                    "url": "https://www.amazon.com",
+                    "rating": 4.2
                 }
             ],
             'music': [
@@ -1178,6 +1356,27 @@ def generate_fallback_products(shopping_request, user_data):
                     "image_url": "/placeholder.svg",
                     "url": "https://www.amazon.com",
                     "rating": 4.2
+                },
+                {
+                    "title": "Microphone Stand",
+                    "price_value": 24.99,
+                    "image_url": "/placeholder.svg",
+                    "url": "https://www.amazon.com",
+                    "rating": 4.0
+                },
+                {
+                    "title": "Guitar Capo",
+                    "price_value": 8.99,
+                    "image_url": "/placeholder.svg",
+                    "url": "https://www.amazon.com",
+                    "rating": 4.4
+                },
+                {
+                    "title": "Music Stand",
+                    "price_value": 19.99,
+                    "image_url": "/placeholder.svg",
+                    "url": "https://www.amazon.com",
+                    "rating": 4.1
                 }
             ]
         }

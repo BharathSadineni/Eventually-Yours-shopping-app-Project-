@@ -345,7 +345,9 @@ def get_shopping_recommendations():
         
         # Check if request has JSON content
         if not request.is_json:
-            print("Error: Request is not JSON")
+            print("❌ Error: Request is not JSON (shopping-recommendations endpoint)")
+            print(f"   Content-Type: {request.content_type}")
+            print(f"   Headers: {dict(request.headers)}")
             return jsonify({
                 "status": "error", 
                 "message": "Content-Type must be application/json",
@@ -354,7 +356,8 @@ def get_shopping_recommendations():
         
         data = request.get_json()
         if data is None:
-            print("Error: Failed to parse JSON data")
+            print("❌ Error: Failed to parse JSON data (shopping-recommendations endpoint)")
+            print(f"   Raw data: {request.get_data()}")
             return jsonify({
                 "status": "error", 
                 "message": "Invalid JSON data"

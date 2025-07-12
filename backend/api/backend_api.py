@@ -1063,16 +1063,23 @@ def process_recommendation_request(request_data):
 
         try:
             # Get AI sorted recommendations with timeout
-            print(f"🤖 Calling Gemini API for product ranking...")
-            gemini_start_time = time.time()
-            gemini_timeout = 15  # 15 seconds for Gemini API
+                    print(f"🤖 Calling Gemini API for product ranking...")
+        print(f"📊 Sending {len(valid_products)} scraped products to Gemini for ranking:")
+        for i, product in enumerate(valid_products, 1):
+            print(f"   {i}. {product.get('title', 'No title')} - {product.get('price', 'No price')}")
+        
+        gemini_start_time = time.time()
+        gemini_timeout = 15  # 15 seconds for Gemini API
             
             sorted_products_text = sorting_algo.get_sorted_products(
                 user_input, user_data, valid_products
             )
             
-            gemini_elapsed = time.time() - gemini_start_time
-            print(f"✅ Gemini API completed in {gemini_elapsed:.1f} seconds")
+                    gemini_elapsed = time.time() - gemini_start_time
+        print(f"✅ Gemini API completed in {gemini_elapsed:.1f} seconds")
+        print(f"🤖 Gemini's response:")
+        print(sorted_products_text)
+        print(f"📊 End of Gemini response")
 
             # Parse AI recommendations
             ai_recommendations = parse_ai_recommendations(sorted_products_text)
@@ -1222,6 +1229,13 @@ def process_recommendation_request(request_data):
             }
 
             user_sessions[session_id]["results"] = response_data
+            
+            print(f"🎉 Successfully processed recommendation request for session {session_id}")
+            print(f"📦 Final products returned to user:")
+            for i, product in enumerate(formatted_products, 1):
+                print(f"   {i}. {product.get('name', 'No name')} - {product.get('price', 'No price')} {product.get('currency', '')}")
+                print(f"      Reasoning: {product.get('reasoning', 'No reasoning')}")
+            
             return response_data
 
         except Exception as e:

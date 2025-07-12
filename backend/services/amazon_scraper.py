@@ -345,6 +345,12 @@ def amazon_category_top_products(
             
             if products:
                 print(f"✅ Found {len(products)} products with {strategy_name} strategy")
+                # Log detailed product information
+                for i, product in enumerate(products, 1):
+                    print(f"   {i}. {product.get('title', 'No title')}")
+                    print(f"      Price: {product.get('price', 'No price')}")
+                    print(f"      Rating: {product.get('average_rating', 'No rating')}")
+                    print(f"      URL: {product.get('url', 'No URL')}")
                 all_products.extend(products)
                 
                 # If we have enough products, stop trying more strategies

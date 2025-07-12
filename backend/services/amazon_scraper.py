@@ -5,6 +5,24 @@ from bs4 import BeautifulSoup
 from urllib.parse import quote_plus
 import requests
 import re
+import threading
+
+# Global rate limiting for concurrent requests
+_request_lock = threading.Lock()
+_last_request_time = 0
+_min_request_interval = 1.5  # Minimum 1.5 seconds between requests
+
+
+def _rate_limit_request():
+    """Ensure minimum time between requests to avoid overwhelming Amazon"""
+    global _last_request_time
+    with _request_lock:
+        current_time = time.time()
+        time_since_last = current_time - _last_request_time
+        if time_since_last < _min_request_interval:
+            sleep_time = _min_request_interval - time_since_last
+            time.sleep(sleep_time)
+        _last_request_time = time.time()
 
 
 def amazon_category_top_products(
@@ -15,7 +33,11 @@ def amazon_category_top_products(
     - Single request strategy
     - Minimal delays
     - Better anti-detection to reduce 503 errors
+    - Rate limiting for concurrent requests
     """
+    # Apply rate limiting for concurrent requests
+    _rate_limit_request()
+    
     user_agents = [
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15",
@@ -99,22 +121,29 @@ def amazon_category_top_products(
                     "Referer": f"https://www.{domain}/"
                 })
             
-            # Adaptive delay based on strategy
+            # Adaptive delay based on strategy and concurrent processing
             if strategy_idx == 0:
-                time.sleep(random.uniform(0.2, 0.5))  # Shorter for first strategy
+                time.sleep(random.uniform(0.5, 1.0))  # Slightly longer for concurrent safety
             else:
-                time.sleep(random.uniform(0.5, 1.0))  # Longer for retries
+                time.sleep(random.uniform(1.0, 2.0))  # Longer for retries
             
             # Fast timeout
-            response = session.get(search_url, timeout=6)
+            response = session.get(search_url, timeout=8)  # Increased timeout slightly
+            
+            # Check for 503 error specifically
+            if response.status_code == 503:
+                print(f"503 Server Error for {category} ({strategy_name} strategy)")
+                time.sleep(random.uniform(3, 5))  # Wait longer for 503 errors
+                continue
+                
             response.raise_for_status()
             soup = BeautifulSoup(response.text, "html.parser")
 
             # Quick bot detection check
             page_text = soup.get_text().lower()
-            if any(term in page_text for term in ["robot", "captcha", "blocked", "unusual", "verify"]):
+            if any(term in page_text for term in ["robot", "captcha", "blocked", "unusual", "verify", "security check"]):
                 print(f"Bot detection detected for {category}")
-                time.sleep(random.uniform(1, 2))  # Wait longer on detection
+                time.sleep(random.uniform(2, 3))  # Wait longer on detection
                 continue
 
             # Extract product data efficiently
@@ -202,7 +231,7 @@ def amazon_category_top_products(
         except requests.exceptions.HTTPError as e:
             if e.response.status_code == 503:
                 print(f"503 Server Error for {category} ({strategy_name} strategy)")
-                time.sleep(random.uniform(2, 4))  # Wait longer for 503 errors
+                time.sleep(random.uniform(3, 5))  # Wait longer for 503 errors
                 continue
             else:
                 print(f"HTTP Error {e.response.status_code} for {category}: {e}")

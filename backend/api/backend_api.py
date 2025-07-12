@@ -361,7 +361,17 @@ def get_shopping_recommendations():
                         del active_requests[session_id]
                 
                 print(f"Error in concurrent processing: {e}")
-                return jsonify({"status": "error", "message": "Request processing failed"}), 500
+                # Provide more specific error message based on the exception type
+                if "timeout" in str(e).lower():
+                    error_msg = "Request timed out. Please try again with fewer categories."
+                elif "503" in str(e).lower() or "server error" in str(e).lower():
+                    error_msg = "Amazon is temporarily blocking requests. Please try again in a few minutes."
+                elif "bot detection" in str(e).lower():
+                    error_msg = "Amazon detected automated requests. Please try again later."
+                else:
+                    error_msg = "Request processing failed. Please try again."
+                
+                return jsonify({"status": "error", "message": error_msg}), 500
                 
         except Exception as e:
             # Remove from active requests on error
@@ -736,13 +746,99 @@ def process_recommendation_request(request_data):
             categories_to_process = categories
             print(f"Development mode: Processing {len(categories_to_process)} categories")
 
+        # Controlled concurrent processing with limited workers
+        # Use a smaller thread pool to avoid overwhelming Amazon
+        # Adjust concurrency based on environment
+        if IS_PRODUCTION:
+            max_workers = 1  # More conservative in production
+        else:
+            max_workers = 2  # Slightly more aggressive in development
+            
+        category_worker_pool = ThreadPoolExecutor(max_workers=max_workers)
+        category_futures = {}
+        category_products = {}
+
+        print(f"🚀 Starting concurrent processing with {len(categories_to_process)} categories using {max_workers} workers")
+
+        # Submit all categories for concurrent processing
         for idx, category in enumerate(categories_to_process):
-            category, products = fetch_category_products(category)
-            category_products[category] = products
-            # Add delay between category scrapes in production
-            if IS_PRODUCTION and idx < len(categories_to_process) - 1:
-                import time
-                time.sleep(random.uniform(1, 2))  # Reduced from 2-3 to 1-2 seconds
+            future = category_worker_pool.submit(fetch_category_products, category)
+            category_futures[category] = future
+            print(f"📋 Submitted category {idx + 1}/{len(categories_to_process)}: {category}")
+
+        # Track successful and failed categories
+        successful_categories = 0
+        failed_categories = 0
+
+        print(f"⏳ Waiting for {len(category_futures)} categories to complete...")
+
+        # Collect results as they complete
+        for idx, (category, future) in enumerate(category_futures.items()):
+            print(f"🔄 Processing result {idx + 1}/{len(category_futures)}: {category}")
+            max_retries = 1  # Allow 1 retry per category in concurrent mode
+            retry_count = 0
+            success = False
+            
+            while retry_count <= max_retries and not success:
+                try:
+                    # Wait for each category with timeout
+                    category_name, products = future.result(timeout=30)  # 30 second timeout per category
+                    category_products[category] = products
+                    successful_categories += 1
+                    success = True
+                    print(f"✅ Successfully processed category: {category} ({len(products)} products)")
+                except Exception as e:
+                    retry_count += 1
+                    print(f"❌ Error processing category {category} (attempt {retry_count}/{max_retries + 1}): {e}")
+                    
+                    if retry_count <= max_retries:
+                        print(f"🔄 Retrying category {category} in 3 seconds...")
+                        import time
+                        time.sleep(3)  # Wait before retry
+                        # Submit a new future for retry
+                        future = category_worker_pool.submit(fetch_category_products, category)
+                    else:
+                        print(f"❌ Failed to process category {category} after {max_retries + 1} attempts")
+                        category_products[category] = []  # Empty list for failed category
+                        failed_categories += 1
+
+        # Shutdown the worker pool
+        category_worker_pool.shutdown(wait=True)
+
+        print(f"📊 Category processing summary: {successful_categories} successful, {failed_categories} failed")
+
+        # Check if we have any successful categories
+        if successful_categories == 0:
+            print("❌ No categories were successfully processed, using fallback products")
+            fallback_products = generate_fallback_products(shopping_request, user_data)
+            if fallback_products:
+                # Format fallback products
+                formatted_products = []
+                for i, product in enumerate(fallback_products):
+                    formatted_products.append({
+                        "id": str(i + 1),
+                        "name": product["title"],
+                        "price": product.get("price_value", 0),
+                        "currency": currency_symbol,
+                        "image": product.get("image_url", "/placeholder.svg"),
+                        "buyUrl": product.get("url", ""),
+                        "category": "Sample",
+                        "rating": product.get("rating", 4.0),
+                        "reasoning": "Sample product based on your interests",
+                    })
+                
+                response_data = {
+                    "status": "success",
+                    "categories": categories,
+                    "products": formatted_products,
+                    "ai_recommendations": json.dumps([]),
+                    "note": "Using sample products due to Amazon blocking requests"
+                }
+                
+                user_sessions[session_id]["results"] = response_data
+                return response_data
+            else:
+                return {"status": "error", "message": "Unable to fetch product recommendations. Amazon is currently blocking requests. Please try again later."}, 503
 
         # Gather all products
         all_products = []
@@ -967,7 +1063,21 @@ def process_recommendation_request(request_data):
 
     except Exception as e:
         print(f"Error processing recommendation request: {e}")
-        return {"status": "error", "message": str(e)}, 500
+        
+        # Check if it's an Amazon-related error
+        error_str = str(e).lower()
+        if "503" in error_str or "server error" in error_str:
+            error_msg = "Amazon is temporarily blocking requests. Please try again in a few minutes."
+        elif "bot detection" in error_str or "captcha" in error_str:
+            error_msg = "Amazon detected automated requests. Please try again later."
+        elif "timeout" in error_str:
+            error_msg = "Request timed out. Please try again with fewer categories."
+        elif "connection" in error_str:
+            error_msg = "Network connection issue. Please check your internet connection and try again."
+        else:
+            error_msg = f"Request processing failed: {str(e)}"
+        
+        return {"status": "error", "message": error_msg}, 500
 
 
 def generate_fallback_products(shopping_request, user_data):

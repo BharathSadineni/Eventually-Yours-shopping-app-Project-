@@ -1518,6 +1518,14 @@ def generate_fallback_products(shopping_request, user_data):
         # Default to tech if no match
         else:
             return sample_products.get('tech', [])
+            return sample_products.get('sports', [])
+        elif any(word in request_lower for word in ['game', 'gaming', 'console', 'controller']):
+            return sample_products.get('gaming', [])
+        elif any(word in request_lower for word in ['music', 'audio', 'sound', 'speaker']):
+            return sample_products.get('music', [])
+        else:
+            # Default to tech if no specific category detected
+            return sample_products.get('tech', [])
             
     except Exception as e:
         print(f"Error generating fallback products: {str(e).strip()}")

@@ -412,8 +412,12 @@ def get_shopping_recommendations():
                     error_msg = "Amazon is temporarily blocking requests. Please try again in a few minutes."
                 elif "bot detection" in str(e).lower():
                     error_msg = "Amazon detected automated requests. Please try again later."
+                elif "connection" in str(e).lower():
+                    error_msg = "Network connection issues. Please check your internet connection and try again."
+                elif "rate limit" in str(e).lower() or "429" in str(e).lower():
+                    error_msg = "Too many requests. Please wait a moment and try again."
                 else:
-                    error_msg = "Request processing failed. Please try again."
+                    error_msg = "Request processing failed. Please try again in a few minutes."
                 
                 return jsonify({"status": "error", "message": error_msg}), 500
                 
@@ -724,70 +728,87 @@ def process_recommendation_request(request_data):
         category_products = {}
 
         def fetch_category_products(category):
-            # Extract preferred brands from shopping input
-            preferred_brands = shopping_input.get('brandsPreferred', '')
-            
-            # Get products directly from search results (much faster)
-            scraped_products = amazon_category_top_products(
-                category,
-                amazon_domain,
-                num_results=random.randint(2, 3),  # Reduced to 2-3 products per category
-                budget_range=user_data.get("budget_range"),
-                preferred_brands=preferred_brands,  # Pass preferred brands to scraper
-            )
-            
-            if not scraped_products:
-                return category, []
+            """Fetch products for a category with enhanced error handling"""
+            try:
+                # Extract preferred brands from shopping input
+                preferred_brands = shopping_input.get('brandsPreferred', '')
+                
+                # Get products directly from search results with better error handling
+                scraped_products = amazon_category_top_products(
+                    category,
+                    amazon_domain,
+                    num_results=random.randint(2, 3),  # Reduced to 2-3 products per category
+                    budget_range=user_data.get("budget_range"),
+                    preferred_brands=preferred_brands,  # Pass preferred brands to scraper
+                )
+                
+                if not scraped_products:
+                    print(f"⚠️ No products found for category: {category}")
+                    return category, []
 
-            # Process and score the scraped products
-            scored_products = []
-            
-            for product in scraped_products:
-                if not product or not product.get('title'):
-                    continue
-                    
-                # Enhanced brand filtering and scoring
-                product_score = 0
+                # Process and score the scraped products
+                scored_products = []
                 
-                # Check if product title contains preferred brands
-                if preferred_brands and preferred_brands.strip():
-                    brands = [brand.strip().lower() for brand in preferred_brands.split(',') if brand.strip()]
-                    product_title = product.get('title', '').lower()
+                for product in scraped_products:
+                    if not product or not product.get('title'):
+                        continue
+                        
+                    # Enhanced brand filtering and scoring
+                    product_score = 0
                     
-                    # Check brand matches in title
-                    for brand in brands:
-                        # Brand in title gets good score
-                        if brand in product_title:
-                            product_score += 10  # High score for brand match in title
-                            break
-                        # Partial brand match gets lower score
-                        elif any(brand_word in product_title for brand_word in brand.split()):
-                            product_score += 5  # Medium score for partial brand match
-                            break
-                
-                # Filter products by budget range if price_value is available
-                budget_range = user_data.get("budget_range")
-                if budget_range and product.get("price_value") is not None:
-                    try:
-                        low, high = (
-                            budget_range.replace("€", "")
-                            .replace("$", "")
-                            .replace("£", "")
-                            .split("-")
-                        )
-                        low = float(low.strip())
-                        high = float(high.strip())
-                        if low <= product["price_value"] <= high:
-                            # Add budget score (closer to middle of range gets higher score)
-                            budget_mid = (low + high) / 2
-                            price_diff = abs(product["price_value"] - budget_mid)
-                            budget_score = max(0, 5 - (price_diff / budget_mid) * 5)
-                            product_score += budget_score
+                    # Check if product title contains preferred brands
+                    if preferred_brands and preferred_brands.strip():
+                        brands = [brand.strip().lower() for brand in preferred_brands.split(',') if brand.strip()]
+                        product_title = product.get('title', '').lower()
+                        
+                        # Check brand matches in title
+                        for brand in brands:
+                            # Brand in title gets good score
+                            if brand in product_title:
+                                product_score += 10  # High score for brand match in title
+                                break
+                            # Partial brand match gets lower score
+                            elif any(brand_word in product_title for brand_word in brand.split()):
+                                product_score += 5  # Medium score for partial brand match
+                                break
+                    
+                    # Filter products by budget range if price_value is available
+                    budget_range = user_data.get("budget_range")
+                    if budget_range and product.get("price_value") is not None:
+                        try:
+                            low, high = (
+                                budget_range.replace("€", "")
+                                .replace("$", "")
+                                .replace("£", "")
+                                .split("-")
+                            )
+                            low = float(low.strip())
+                            high = float(high.strip())
+                            if low <= product["price_value"] <= high:
+                                # Add budget score (closer to middle of range gets higher score)
+                                budget_mid = (low + high) / 2
+                                price_diff = abs(product["price_value"] - budget_mid)
+                                budget_score = max(0, 5 - (price_diff / budget_mid) * 5)
+                                product_score += budget_score
+                                scored_products.append((product, product_score))
+                        except Exception as e:
+                            # If budget parsing fails, include product anyway
+                            print(f"⚠️ Budget parsing failed for {category}: {str(e)}")
                             scored_products.append((product, product_score))
-                    except:
-                        # If budget parsing fails, include product anyway
+                    else:
+                        # If no budget range or price value, include product with base score
                         scored_products.append((product, product_score))
-                else:
+                
+                # Sort by score and return top products
+                scored_products.sort(key=lambda x: x[1], reverse=True)
+                top_products = [product for product, score in scored_products[:3]]  # Top 3 products
+                
+                                print(f"✅ Successfully processed {len(top_products)} products for {category}")
+                return category, top_products
+                
+            except Exception as e:
+                print(f"❌ Error fetching products for {category}: {str(e)}")
+                return category, []
                     # If no price or budget, include product
                     scored_products.append((product, product_score))
 
@@ -799,20 +820,21 @@ def process_recommendation_request(request_data):
 
         # --- PRODUCTION-ONLY LIMIT AND DELAY ---
         if IS_PRODUCTION:
-            max_categories = 3  # Reduced from 4 to 3 for faster processing
+            max_categories = 2  # Further reduced to 2 for better reliability
             categories_to_process = categories[:max_categories]
             print(f"Production mode: Processing {len(categories_to_process)} categories")
         else:
-            categories_to_process = categories
+            max_categories = 3  # Reduced to 3 for development too
+            categories_to_process = categories[:max_categories]
             print(f"Development mode: Processing {len(categories_to_process)} categories")
 
         # Controlled concurrent processing with limited workers
         # Use a smaller thread pool to avoid overwhelming Amazon
         # Adjust concurrency based on environment
         if IS_PRODUCTION:
-            max_workers = 1  # More conservative in production
+            max_workers = 1  # Single worker for maximum reliability
         else:
-            max_workers = 2  # Slightly more aggressive in development
+            max_workers = 1  # Single worker for development too for consistency
             
         category_worker_pool = ThreadPoolExecutor(max_workers=max_workers)
         category_futures = {}
@@ -831,18 +853,18 @@ def process_recommendation_request(request_data):
         successful_categories = 0
         failed_categories = 0
 
-        print(f"⏳ Waiting for {len(category_futures)} categories to complete (30 second timeout)...")
+        print(f"⏳ Waiting for {len(category_futures)} categories to complete ({timeout_seconds} second timeout)...")
 
-        # Collect results with 30-second timeout
+        # Collect results with shorter timeout for better reliability
         start_time = time.time()
-        timeout_seconds = 30
+        timeout_seconds = 25 if IS_PRODUCTION else 30  # Shorter timeout in production
         timeout_reached = False
         
         for idx, (category, future) in enumerate(category_futures.items()):
             # Check if we've exceeded the 30-second timeout
             elapsed_time = time.time() - start_time
             if elapsed_time >= timeout_seconds:
-                print(f"⏰ 30-second timeout reached! Stopping scraping and using {successful_categories} successful categories")
+                print(f"⏰ {timeout_seconds}-second timeout reached! Stopping scraping and using {successful_categories} successful categories")
                 timeout_reached = True
                 break
                 
@@ -887,7 +909,7 @@ def process_recommendation_request(request_data):
         elapsed_time = time.time() - start_time
         print(f"📊 Category processing summary: {successful_categories} successful, {failed_categories} failed in {elapsed_time:.1f} seconds")
         if timeout_reached:
-            print(f"⚠️  Processing was cut off due to 30-second timeout")
+            print(f"⚠️  Processing was cut off due to {timeout_seconds}-second timeout")
 
         # Check if we have any successful categories
         if successful_categories == 0:
@@ -914,13 +936,13 @@ def process_recommendation_request(request_data):
                     "categories": categories,
                     "products": formatted_products,
                     "ai_recommendations": json.dumps([]),
-                    "note": "Using sample products due to Amazon blocking requests"
+                    "note": "Using sample products due to Amazon blocking requests. Please try again in a few minutes."
                 }
                 
                 user_sessions[session_id]["results"] = response_data
                 return response_data
             else:
-                return {"status": "error", "message": "Unable to fetch product recommendations. Amazon is currently blocking requests. Please try again later."}, 503
+                return {"status": "error", "message": "Unable to fetch product recommendations at this time. Amazon is temporarily blocking requests. Please try again in a few minutes."}, 503
 
         # Check total processing time
         total_elapsed = time.time() - start_time
@@ -1453,10 +1475,40 @@ def generate_fallback_products(shopping_request, user_data):
             ]
         }
         
-        # Determine which category to use
-        if any(word in request_lower for word in ['tech', 'technology', 'electronic', 'computer', 'phone']):
+        # Determine which category to use based on request and user interests
+        user_interests = user_data.get('interests', '').lower()
+        favorite_categories = [cat.lower() for cat in user_data.get('favorite_categories', [])]
+        
+        # Check request first, then user interests, then favorite categories
+        if any(word in request_lower for word in ['tech', 'technology', 'electronic', 'computer', 'phone', 'laptop', 'gadget']):
             return sample_products.get('tech', [])
-        elif any(word in request_lower for word in ['sport', 'fitness', 'running', 'exercise', 'workout']):
+        elif any(word in request_lower for word in ['sport', 'fitness', 'workout', 'exercise', 'running', 'gym']):
+            return sample_products.get('sports', [])
+        elif any(word in request_lower for word in ['game', 'gaming', 'console', 'controller', 'headset']):
+            return sample_products.get('gaming', [])
+        elif any(word in request_lower for word in ['music', 'song', 'album', 'artist', 'headphone', 'speaker']):
+            return sample_products.get('music', [])
+        # Check user interests
+        elif any(word in user_interests for word in ['tech', 'technology', 'computer']):
+            return sample_products.get('tech', [])
+        elif any(word in user_interests for word in ['sport', 'fitness', 'exercise']):
+            return sample_products.get('sports', [])
+        elif any(word in user_interests for word in ['game', 'gaming']):
+            return sample_products.get('gaming', [])
+        elif any(word in user_interests for word in ['music', 'song']):
+            return sample_products.get('music', [])
+        # Check favorite categories
+        elif any(word in favorite_categories for word in ['tech', 'technology', 'electronics']):
+            return sample_products.get('tech', [])
+        elif any(word in favorite_categories for word in ['sport', 'fitness']):
+            return sample_products.get('sports', [])
+        elif any(word in favorite_categories for word in ['gaming', 'games']):
+            return sample_products.get('gaming', [])
+        elif any(word in favorite_categories for word in ['music', 'audio']):
+            return sample_products.get('music', [])
+        # Default to tech if no match
+        else:
+            return sample_products.get('tech', [])
             return sample_products.get('sports', [])
         elif any(word in request_lower for word in ['game', 'gaming', 'console', 'controller']):
             return sample_products.get('gaming', [])

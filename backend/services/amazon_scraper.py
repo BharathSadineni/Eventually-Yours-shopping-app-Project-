@@ -6,11 +6,46 @@ from urllib.parse import quote_plus
 import requests
 import re
 import threading
+import json
+from typing import List, Dict, Optional, Tuple
 
 # Global rate limiting for concurrent requests
 _request_lock = threading.Lock()
 _last_request_time = 0
-_min_request_interval = 1.5  # Minimum 1.5 seconds between requests
+_min_request_interval = 2.0  # Increased to 2 seconds for better reliability
+
+# Session management for better reliability
+_session_cache = {}
+_session_lock = threading.Lock()
+
+def _get_session(domain: str) -> requests.Session:
+    """Get or create a session for a specific domain with persistent cookies"""
+    with _session_lock:
+        if domain not in _session_cache:
+            session = requests.Session()
+            
+            # Enhanced headers that look more like a real browser
+            session.headers.update({
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+                "Accept-Language": "en-US,en;q=0.9,en-GB;q=0.8",
+                "Accept-Encoding": "gzip, deflate, br",
+                "DNT": "1",
+                "Connection": "keep-alive",
+                "Upgrade-Insecure-Requests": "1",
+                "Sec-Fetch-Dest": "document",
+                "Sec-Fetch-Mode": "navigate",
+                "Sec-Fetch-Site": "none",
+                "Sec-Fetch-User": "?1",
+                "Cache-Control": "max-age=0",
+                "sec-ch-ua": '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+                "sec-ch-ua-mobile": "?0",
+                "sec-ch-ua-platform": '"Windows"',
+            })
+            
+            _session_cache[domain] = session
+            
+        return _session_cache[domain]
 
 
 def _rate_limit_request():
@@ -25,252 +60,324 @@ def _rate_limit_request():
         _last_request_time = time.time()
 
 
-def amazon_category_top_products(
-    category, amazon_domain, num_results=4, budget_range=None, preferred_brands=None
-):
-    """
-    Ultra-fast Amazon scraper optimized for speed with better anti-detection
-    - Single request strategy
-    - Minimal delays
-    - Better anti-detection to reduce 503 errors
-    - Rate limiting for concurrent requests
-    - 15-second timeout per category
-    """
-    # Apply rate limiting for concurrent requests
-    _rate_limit_request()
-    
-    # Set timeout for this category
-    start_time = time.time()
-    category_timeout = 15  # 15 seconds per category
-    
-    user_agents = [
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15",
-        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0",
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Edge/120.0.0.0",
+def _detect_bot_protection(soup: BeautifulSoup) -> bool:
+    """Detect if Amazon is showing bot protection page"""
+    page_text = soup.get_text().lower()
+    bot_indicators = [
+        "robot", "captcha", "blocked", "unusual", "verify", "security check",
+        "enter the characters you see below", "type the characters you see",
+        "to discuss automated access", "automated requests"
     ]
+    return any(indicator in page_text for indicator in bot_indicators)
 
-    print(f"Searching for category: {category} on {amazon_domain}")
-    if preferred_brands:
-        print(f"Preferred brands: {preferred_brands}")
 
-    # Parse budget_range if provided
-    low_price = None
-    high_price = None
-    if budget_range:
-        try:
-            parts = (
-                budget_range.replace("£", "")
-                .replace("€", "")
-                .replace("$", "")
-                .split("-")
-            )
-            if len(parts) == 2:
-                low_price = parts[0].strip()
-                high_price = parts[1].strip()
-        except Exception:
-            print("Error parsing budget range. Please check the format.")
-
-    # Construct Amazon search URL for the category, sorted by review rank
-    domain = amazon_domain
-    if domain.startswith("www."):
-        domain = domain[4:]
-
-    # Build search query with brand preference if available
-    search_query = category
-    if preferred_brands and preferred_brands.strip():
-        brands = [brand.strip() for brand in preferred_brands.split(',') if brand.strip()]
-        if brands:
-            # Add the first preferred brand to the search query
-            search_query = f"{brands[0]} {category}"
-
-    # Add price filters if available
-    price_filter = ""
-    if low_price and high_price:
-        price_filter = f"&low-price={low_price}&high-price={high_price}"
-
-    # Try different search strategies to avoid 503 errors
-    search_strategies = [
-        ("best-sellers", f"https://www.{domain}/s?k={quote_plus(search_query)}&s=best-sellers{price_filter}"),
-        ("review-rank", f"https://www.{domain}/s?k={quote_plus(search_query)}&s=review-rank{price_filter}"),
-        ("default", f"https://www.{domain}/s?k={quote_plus(search_query)}{price_filter}"),
+def _extract_products_from_page(soup: BeautifulSoup, domain: str) -> List[Dict]:
+    """Extract product data from Amazon search results page"""
+    products = []
+    
+    # Multiple selectors for product containers
+    product_selectors = [
+        "[data-component-type='s-search-result']",
+        ".s-result-item",
+        "[data-asin]"
     ]
-
-    for strategy_idx, (strategy_name, search_url) in enumerate(search_strategies):
-        # Check timeout before each strategy
-        elapsed_time = time.time() - start_time
-        if elapsed_time >= category_timeout:
-            print(f"⏰ Category timeout reached for {category}, stopping search")
+    
+    product_containers = []
+    for selector in product_selectors:
+        containers = soup.select(selector)
+        if containers:
+            product_containers = containers[:12]  # Limit to first 12
             break
-            
-        print(f"Trying {strategy_name} strategy: {search_url}")
-        
+    
+    for container in product_containers:
         try:
-            # Enhanced headers with better anti-detection
-            headers = {
-                "User-Agent": random.choice(user_agents),
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8",
-                "Accept-Language": "en-US,en;q=0.9,en-GB;q=0.8",
-                "Accept-Encoding": "gzip, deflate, br",
-                "DNT": "1",
-                "Connection": "keep-alive",
-                "Upgrade-Insecure-Requests": "1",
-                "Sec-Fetch-Dest": "document",
-                "Sec-Fetch-Mode": "navigate",
-                "Sec-Fetch-Site": "none",
-                "Cache-Control": "max-age=0",
-            }
+            # Extract product URL
+            link_selectors = [
+                "a.a-link-normal.s-no-outline",
+                "a[href*='/dp/']",
+                "h2 a",
+                "a[data-cy='title-recipe-link']"
+            ]
             
-            # Use session with persistent cookies
-            session = requests.Session()
-            session.headers.update(headers)
+            link_elem = None
+            for selector in link_selectors:
+                link_elem = container.select_one(selector)
+                if link_elem:
+                    break
             
-            # Add referer to look more natural
-            if strategy_idx > 0:
+            if not link_elem:
+                continue
+                
+            href = link_elem.get("href")
+            if not href or "/dp/" not in href:
+                continue
+            
+            # Clean URL
+            if href.startswith("/"):
+                full_url = f"https://www.{domain}{href.split('?')[0]}"
+            elif href.startswith("http"):
+                full_url = href.split('?')[0]
+            else:
+                continue
+            
+            # Extract title
+            title_selectors = [
+                "h2 a span",
+                "h2 span",
+                ".a-text-normal",
+                "span.a-size-base-plus"
+            ]
+            
+            title = None
+            for selector in title_selectors:
+                title_elem = container.select_one(selector)
+                if title_elem:
+                    title = title_elem.get_text(strip=True)
+                    if title and len(title) > 5:
+                        break
+            
+            if not title:
+                continue
+            
+            # Extract price
+            price_selectors = [
+                ".a-price .a-offscreen",
+                ".a-price-whole",
+                ".a-price .a-price-whole",
+                ".a-price-range .a-offscreen"
+            ]
+            
+            price_text = None
+            for selector in price_selectors:
+                price_elem = container.select_one(selector)
+                if price_elem:
+                    price_text = price_elem.get_text(strip=True)
+                    if price_text:
+                        break
+            
+            price_value = parse_price_to_float(price_text)
+            
+            # Extract rating
+            rating_selectors = [
+                "span.a-icon-alt",
+                ".a-icon-star-small .a-icon-alt",
+                "i.a-icon-star .a-icon-alt"
+            ]
+            
+            rating = None
+            for selector in rating_selectors:
+                rating_elem = container.select_one(selector)
+                if rating_elem:
+                    rating_text = rating_elem.get_text(strip=True)
+                    rating_match = re.search(r'(\d+\.?\d*)', rating_text)
+                    if rating_match:
+                        try:
+                            rating = float(rating_match.group(1))
+                            break
+                        except ValueError:
+                            continue
+            
+            # Extract image
+            img_selectors = [
+                "img.s-image",
+                "img[data-image-latency='s-product-image']",
+                "img[src*='images']"
+            ]
+            
+            image_url = None
+            for selector in img_selectors:
+                img_elem = container.select_one(selector)
+                if img_elem and img_elem.has_attr("src"):
+                    image_url = img_elem.get("src")
+                    if image_url and "data:image" not in image_url:
+                        break
+            
+            # Only add if we have essential data
+            if title and full_url:
+                product_data = {
+                    "url": full_url,
+                    "title": title,
+                    "image_url": image_url,
+                    "price": price_text,
+                    "price_value": price_value,
+                    "average_rating": rating,
+                }
+                products.append(product_data)
+                
+        except Exception as e:
+            continue  # Skip this product if there's an error
+    
+    return products
+
+
+def _make_request_with_retry(url: str, domain: str, max_retries: int = 3) -> Tuple[Optional[requests.Response], str]:
+    """Make a request with retry logic and better error handling"""
+    session = _get_session(domain)
+    
+    for attempt in range(max_retries):
+        try:
+            # Apply rate limiting
+            _rate_limit_request()
+            
+            # Add random delay between attempts
+            if attempt > 0:
+                delay = random.uniform(3, 6) * (attempt + 1)  # Exponential backoff
+                time.sleep(delay)
+            
+            # Add referer for subsequent attempts
+            if attempt > 0:
                 session.headers.update({
                     "Referer": f"https://www.{domain}/"
                 })
             
-            # Adaptive delay based on strategy and concurrent processing
-            if strategy_idx == 0:
-                time.sleep(random.uniform(0.5, 1.0))  # Slightly longer for concurrent safety
-            else:
-                time.sleep(random.uniform(1.0, 2.0))  # Longer for retries
+            # Make request with timeout
+            response = session.get(url, timeout=10)
             
-            # Check timeout after delay
-            elapsed_time = time.time() - start_time
-            if elapsed_time >= category_timeout:
-                print(f"⏰ Category timeout reached for {category} after delay")
-                break
-            
-            # Fast timeout
-            response = session.get(search_url, timeout=8)  # Increased timeout slightly
-            
-            # Check for 503 error specifically
+            # Check for specific error codes
             if response.status_code == 503:
-                print(f"503 Server Error for {category} ({strategy_name} strategy)")
-                time.sleep(random.uniform(3, 5))  # Wait longer for 503 errors
-                continue
-                
-            response.raise_for_status()
+                return None, f"503 Server Error (attempt {attempt + 1}/{max_retries})"
+            elif response.status_code == 429:
+                return None, f"429 Rate Limited (attempt {attempt + 1}/{max_retries})"
+            elif response.status_code == 403:
+                return None, f"403 Forbidden (attempt {attempt + 1}/{max_retries})"
+            elif response.status_code != 200:
+                return None, f"HTTP {response.status_code} (attempt {attempt + 1}/{max_retries})"
+            
+            # Check for bot protection
             soup = BeautifulSoup(response.text, "html.parser")
-
-            # Quick bot detection check
-            page_text = soup.get_text().lower()
-            if any(term in page_text for term in ["robot", "captcha", "blocked", "unusual", "verify", "security check"]):
-                print(f"Bot detection detected for {category}")
-                time.sleep(random.uniform(2, 3))  # Wait longer on detection
-                continue
-
-            # Extract product data efficiently
-            products = []
+            if _detect_bot_protection(soup):
+                return None, f"Bot detection (attempt {attempt + 1}/{max_retries})"
             
-            # Find all product containers - limit to first 12 for better variety
-            product_containers = soup.select("[data-component-type='s-search-result']")[:12]
+            return response, "success"
             
-            for container in product_containers:
-                # Check timeout during product extraction
-                elapsed_time = time.time() - start_time
-                if elapsed_time >= category_timeout:
-                    print(f"⏰ Category timeout reached for {category} during product extraction")
-                    break
-                    
-                try:
-                    # Extract product URL
-                    link_elem = container.select_one("a.a-link-normal.s-no-outline")
-                    if not link_elem:
-                        link_elem = container.select_one("a[href*='/dp/']")
-                    
-                    if not link_elem:
-                        continue
-                        
-                    href = link_elem.get("href")
-                    if not href or "/dp/" not in href:
-                        continue
-                    
-                    # Clean URL
-                    full_url = f"https://{domain}{href.split('?')[0]}"
-                    if "www." not in full_url:
-                        parts = full_url.split("//")
-                        full_url = parts[0] + "//www." + parts[1]
-                    
-                    # Extract title
-                    title_elem = container.select_one("h2 a span")
-                    if not title_elem:
-                        title_elem = container.select_one("h2 span")
-                    title = title_elem.get_text(strip=True) if title_elem else None
-                    
-                    # Extract price
-                    price_elem = container.select_one(".a-price .a-offscreen")
-                    if not price_elem:
-                        price_elem = container.select_one(".a-price-whole")
-                    price_text = price_elem.get_text(strip=True) if price_elem else None
-                    price_value = parse_price_to_float(price_text)
-                    
-                    # Extract rating (simplified)
-                    rating_elem = container.select_one("span.a-icon-alt")
-                    rating = None
-                    if rating_elem:
-                        rating_text = rating_elem.get_text(strip=True)
-                        rating_match = re.search(r'(\d+\.?\d*)', rating_text)
-                        if rating_match:
-                            try:
-                                rating = float(rating_match.group(1))
-                            except ValueError:
-                                pass
-                    
-                    # Extract image
-                    img_elem = container.select_one("img.s-image")
-                    image_url = img_elem.get("src") if img_elem and img_elem.has_attr("src") else None
-                    
-                    # Only add if we have at least a title
-                    if title:
-                        product_data = {
-                            "url": full_url,
-                            "title": title,
-                            "image_url": image_url,
-                            "price": price_text,
-                            "price_value": price_value,
-                            "average_rating": rating,
-                        }
-                        products.append(product_data)
-                        
-                        # Stop if we have enough products
-                        if len(products) >= num_results:
-                            break
-                        
-                except Exception as e:
-                    print(f"Error extracting product data: {str(e).strip()}")
-                    continue
+        except requests.exceptions.Timeout:
+            return None, f"Timeout (attempt {attempt + 1}/{max_retries})"
+        except requests.exceptions.ConnectionError:
+            return None, f"Connection Error (attempt {attempt + 1}/{max_retries})"
+        except Exception as e:
+            return None, f"Request Error: {str(e)} (attempt {attempt + 1}/{max_retries})"
+    
+    return None, f"All {max_retries} attempts failed"
+
+
+def amazon_category_top_products(
+    category: str, 
+    amazon_domain: str, 
+    num_results: int = 4, 
+    budget_range: Optional[str] = None, 
+    preferred_brands: Optional[str] = None
+) -> List[Dict]:
+    """
+    Ultra-reliable Amazon scraper with comprehensive error handling and fallback strategies
+    """
+    print(f"Searching for category: {category} on {amazon_domain}")
+    if preferred_brands:
+        print(f"Preferred brands: {preferred_brands}")
+
+    # Parse budget range
+    low_price = None
+    high_price = None
+    if budget_range:
+        try:
+            parts = budget_range.replace("£", "").replace("€", "").replace("$", "").split("-")
+            if len(parts) == 2:
+                low_price = parts[0].strip()
+                high_price = parts[1].strip()
+        except Exception:
+            print("Error parsing budget range")
+
+    # Clean domain
+    domain = amazon_domain.replace("www.", "")
+    
+    # Build search query
+    search_query = category
+    if preferred_brands and preferred_brands.strip():
+        brands = [brand.strip() for brand in preferred_brands.split(',') if brand.strip()]
+        if brands:
+            search_query = f"{brands[0]} {category}"
+
+    # Add price filters
+    price_filter = ""
+    if low_price and high_price:
+        price_filter = f"&low-price={low_price}&high-price={high_price}"
+
+    # Multiple search strategies with different approaches
+    search_strategies = [
+        {
+            "name": "best-sellers",
+            "url": f"https://www.{domain}/s?k={quote_plus(search_query)}&s=best-sellers{price_filter}",
+            "priority": 1
+        },
+        {
+            "name": "review-rank", 
+            "url": f"https://www.{domain}/s?k={quote_plus(search_query)}&s=review-rank{price_filter}",
+            "priority": 2
+        },
+        {
+            "name": "price-low-to-high",
+            "url": f"https://www.{domain}/s?k={quote_plus(search_query)}&s=price-asc-rank{price_filter}",
+            "priority": 3
+        },
+        {
+            "name": "default",
+            "url": f"https://www.{domain}/s?k={quote_plus(search_query)}{price_filter}",
+            "priority": 4
+        }
+    ]
+
+    all_products = []
+    
+    for strategy in search_strategies:
+        strategy_name = strategy["name"]
+        search_url = strategy["url"]
+        
+        print(f"Trying {strategy_name} strategy: {search_url}")
+        
+        response, status = _make_request_with_retry(search_url, domain, max_retries=2)
+        
+        if response is None:
+            print(f"❌ {status} for {category} ({strategy_name} strategy)")
+            continue
+        
+        try:
+            soup = BeautifulSoup(response.text, "html.parser")
+            products = _extract_products_from_page(soup, domain)
             
             if products:
                 print(f"✅ Found {len(products)} products with {strategy_name} strategy")
-                return products[:num_results]
+                all_products.extend(products)
+                
+                # If we have enough products, stop trying more strategies
+                if len(all_products) >= num_results * 2:  # Get extra products for variety
+                    break
             else:
                 print(f"No products found with {strategy_name} strategy")
-                continue
-                    
-        except requests.exceptions.HTTPError as e:
-            if e.response.status_code == 503:
-                print(f"503 Server Error for {category} ({strategy_name} strategy)")
-                time.sleep(random.uniform(3, 5))  # Wait longer for 503 errors
-                continue
-            else:
-                print(f"HTTP Error {e.response.status_code} for {category}: {str(e).strip()}")
-                continue
-        except requests.exceptions.Timeout:
-            print(f"Timeout for {category} ({strategy_name} strategy)")
-            continue
+                
         except Exception as e:
-            print(f"Amazon category scraping error: {str(e).strip()}")
+            print(f"Error processing {strategy_name} strategy: {str(e)}")
             continue
 
-    print(f"No products found for {category} with any strategy")
-    return []
+    # Remove duplicates and limit results
+    unique_products = []
+    seen_urls = set()
+    
+    for product in all_products:
+        if product["url"] not in seen_urls:
+            unique_products.append(product)
+            seen_urls.add(product["url"])
+            
+            if len(unique_products) >= num_results:
+                break
+    
+    if unique_products:
+        print(f"✅ Successfully found {len(unique_products)} unique products for {category}")
+        return unique_products
+    else:
+        print(f"No products found for {category} with any strategy")
+        return []
 
 
-def parse_price_to_float(price_str):
+def parse_price_to_float(price_str: Optional[str]) -> Optional[float]:
     """Parse price string to float value"""
     if not price_str:
         return None
@@ -288,20 +395,14 @@ def parse_price_to_float(price_str):
     return None
 
 
-def scrape_amazon_product(url):
+def scrape_amazon_product(url: str) -> Optional[Dict]:
     """Scrape detailed product information from Amazon product page"""
     try:
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8",
-            "Accept-Language": "en-US,en;q=0.9",
-            "Accept-Encoding": "gzip, deflate, br",
-            "DNT": "1",
-            "Connection": "keep-alive",
-            "Upgrade-Insecure-Requests": "1",
-        }
+        # Extract domain from URL
+        domain = url.split("//")[1].split("/")[0].replace("www.", "")
         
-        response = requests.get(url, headers=headers, timeout=10)
+        session = _get_session(domain)
+        response = session.get(url, timeout=10)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, "html.parser")
         

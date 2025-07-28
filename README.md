@@ -2,6 +2,8 @@
 
 **Eventually Yours** is a modern, AI-powered shopping assistant that provides personalized product recommendations based on your preferences and shopping context. The app uses advanced AI and live product data to help you shop smarter, find the perfect products for any occasion, and manage your shopping profile with ease.
 
+**[Live Demo / Hosted Version](https://eventuallyyours.netlify.app/)
+**
 ---
 
 ## 📝 Project Description
@@ -211,11 +213,5 @@ This script helps you create your `.env` file with your Gemini API key.
 1. **Complete your profile** with categories and preferences for the best experience.
 2. **Describe your shopping needs**—the AI understands any language and any context.
 3. **Browse and shop** from personalized recommendations instantly.
-
----
-
-## 🌐 Learn More
-
-- [Live Demo / Hosted Version](https://eventuallyyours.netlify.app/)
 
 ---

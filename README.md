@@ -2,8 +2,8 @@
 
 **Eventually Yours** is a modern, AI-powered shopping assistant that provides personalized product recommendations based on your preferences and shopping context. The app uses advanced AI and live product data to help you shop smarter, find the perfect products for any occasion, and manage your shopping profile with ease.
 
-**[Live Demo / Hosted Version](https://eventuallyyours.netlify.app/)
-**
+Hosted Version(https://eventuallyyours.netlify.app/)
+
 ---
 
 ## 📝 Project Description

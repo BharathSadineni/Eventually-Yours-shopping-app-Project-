@@ -1,14 +1,25 @@
 # Eventually Yours Shopping App
 
-**Eventually Yours** is a modern, AI-powered shopping assistant that provides personalized product recommendations based on your preferences and shopping context. The app uses advanced AI and live product data to help you shop smarter, find the perfect products for any occasion, and manage your shopping profile with ease.
+**Eventually Yours** is a modern, AI-powered shopping assistant that provides personalized product recommendations based on your preferences and shopping context. The app uses advanced AI and live Amazon data scraping for the best experience.
 
 [Hosted Version](https://eventuallyyours.netlify.app/)
 
 ---
 
+## Demo Video of Eventually Yours Shopping App
+
+<p align="center">
+  <a href="https://bharathsadineniportfolio.netlify.app/static/media/EventuallyYoursShoppingAppDemo.1a1d0e806cf0a3d3af8f.mp4" target="_blank">
+    <img src="https://github.com/BharathSadineni/Eventually-Yours-shopping-app-Project-/blob/main/Eventually%20Yours%20Demo%20Image.png?raw=true" alt="Eventually Yours Demo Image" width="600"/>
+  </a>
+</p>
+<p align="center"><i>Click the image above to watch the demo video.</i></p>
+
+---
+
 ## 📝 Project Description
 
-Eventually Yours Shopping App is designed to revolutionize the online shopping experience. By combining real-time data scraping from Amazon with the power of AI (powered by Google Gemini), the app delivers recommendations that are uniquely tailored to each user. Whether you're shopping for a specific event, working within a budget, or looking for inspiration, Eventually Yours helps you discover the best products effortlessly.
+Eventually Yours Shopping App is designed to revolutionize the online shopping experience. By combining real-time data scraping from Amazon with the power of AI (powered by Google Gemini), the app delivers highly relevant, context-aware product recommendations tailored to your needs.
 
 **Key Benefits:**
 - Save time searching for products—get instant, relevant suggestions.
@@ -32,7 +43,6 @@ Eventually Yours Shopping App is designed to revolutionize the online shopping e
 ---
 
 ## 🏗️ Architecture Overview
-
 ```
 eventually-yours-shopping-app/
 ├── frontend/                    # React + Vite frontend

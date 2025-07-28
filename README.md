@@ -216,8 +216,6 @@ This script helps you create your `.env` file with your Gemini API key.
 
 ## 🌐 Learn More
 
-- [Live Demo / Hosted Version](https://eventuallyyours.app/)
-- [Performance Optimizations](docs/PERFORMANCE_OPTIMIZATIONS.md)
-- API and deployment guides in the `docs/` folder.
+- [Live Demo / Hosted Version](https://eventuallyyours.netlify.app/)
 
 ---

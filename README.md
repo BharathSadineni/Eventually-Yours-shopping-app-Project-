@@ -183,12 +183,6 @@ See the `docs/` folder for:
 
 ---
 
-## 📄 License
-
-MIT License – see LICENSE file for details
-
----
-
 ## 🔑 Environment Setup
 
 Before running the application, set up your API keys:

@@ -1,6 +1,6 @@
 # Eventually Yours Shopping App
 
-**Eventually Yours** is a modern, AI-powered shopping assistant that provides personalized product recommendations based on your preferences and shopping context. The app uses advanced AI and live Amazon data scraping for the best experience.
+**Eventually Yours** is a modern, AI-powered shopping assistant that provides personalized product recommendations based on your preferences and shopping context. The app uses advanced AI to deliver the best shopping experience tailored to your needs.
 
 [Hosted Version](https://eventuallyyours.netlify.app/)
 
@@ -19,26 +19,26 @@
 
 ## 📝 Project Description
 
-Eventually Yours Shopping App is designed to revolutionize the online shopping experience. By combining real-time data scraping from Amazon with the power of AI (powered by Google Gemini), the app delivers highly relevant, context-aware product recommendations tailored to your needs.
+Eventually Yours Shopping App is designed to revolutionize the online shopping experience. By combining real-time product data with the power of AI (powered by Google Gemini), the app delivers highly relevant, context-aware product recommendations tailored to your needs.
 
 **Key Benefits:**
-- Save time searching for products—get instant, relevant suggestions.
-- Find products for any occasion, from birthdays to everyday needs.
-- Get recommendations in your preferred language.
-- Enjoy a seamless, responsive interface on any device.
+- Save time searching for products; get instant, relevant suggestions
+- Find products for any occasion, from birthdays to everyday needs
+- Get recommendations in your preferred language
+- Enjoy a seamless, responsive interface on any device
 
 ---
 
 ## 🌟 What It Does / Features
 
-- **AI-Powered Recommendations:** Get product suggestions that fit your preferences, shopping habits, and the occasion.
-- **Real-Time Amazon Scraping:** The app fetches up-to-date product info, prices, and details from Amazon for accurate recommendations.
-- **Multi-Category & Occasion Support:** Shop for electronics, fashion, home goods, and more. Filter or describe the occasion for context-aware results.
-- **User Profile Management:** Create a profile, select your favorite categories, and set shopping preferences for even better recommendations.
-- **Personalized Experience:** Complete your profile and get recommendations tailored just for you.
-- **Export/Import Data:** Easily backup or restore your profile and preferences.
-- **Responsive Design:** Enjoy a beautiful, mobile-friendly UI.
-- **Secure:** User data and API keys are protected and never exposed.
+- **AI-Powered Recommendations:** Get product suggestions that fit your preferences, shopping habits, and the occasion
+- **Real-Time Product Data:** The app fetches up-to-date product information, prices, and details for accurate recommendations
+- **Multi-Category & Occasion Support:** Shop for electronics, fashion, home goods, and more. Filter or describe the occasion for context-aware results
+- **User Profile Management:** Create a profile, select your favorite categories, and set shopping preferences for even better recommendations
+- **Personalized Experience:** Complete your profile and get recommendations tailored just for you
+- **Export/Import Data:** Easily backup or restore your profile and preferences
+- **Responsive Design:** Enjoy a beautiful, mobile-friendly UI
+- **Secure:** User data and API keys are protected and never exposed
 
 ---
 
@@ -104,13 +104,13 @@ Backend API runs at `https://eventually-yours-shopping-app-project-production.up
 
 ## 🛠️ Feature List
 
-- **AI Recommendations:** Personalized, context-aware product suggestions.
-- **Live Amazon Data:** Always up-to-date products, prices, and details.
-- **Profile & Preferences:** Manage your favorite categories and shopping habits.
-- **Occasion-Based Shopping:** Get ideas for birthdays, holidays, and more.
-- **Data Import/Export:** Easy backup and restore.
-- **Modern UI:** Fast, accessible, and responsive for all devices.
-- **Secure:** Environment variables and keys are never exposed.
+- **AI Recommendations:** Personalized, context-aware product suggestions
+- **Live Product Data:** Always up-to-date products, prices, and details
+- **Profile & Preferences:** Manage your favorite categories and shopping habits
+- **Occasion-Based Shopping:** Get ideas for birthdays, holidays, and more
+- **Data Import/Export:** Easy backup and restore
+- **Modern UI:** Fast, accessible, and responsive for all devices
+- **Secure:** Environment variables and keys are never exposed
 
 ---
 
@@ -164,15 +164,6 @@ Backend API runs at `https://eventually-yours-shopping-app-project-production.up
 
 ---
 
-## 📚 Documentation
-
-See the `docs/` folder for:
-- Performance optimizations
-- API documentation
-- Deployment guides
-
----
-
 ## 🤝 Contributing
 
 1. Fork the repository
@@ -214,8 +205,11 @@ This script helps you create your `.env` file with your Gemini API key.
 
 ## 💡 Using the App
 
-1. **Complete your profile** with categories and preferences for the best experience.
-2. **Describe your shopping needs**—the AI understands any language and any context.
-3. **Browse and shop** from personalized recommendations instantly.
+1. **Complete your profile** with categories and preferences for the best experience
+2. **Describe your shopping needs**—the AI understands any language and any context
+3. **Browse and shop** from personalized recommendations instantly
 
 ---
+## 🙋‍♂️ Support
+
+If you have any questions or need help with the app, please feel free to open an issue or reach out!
